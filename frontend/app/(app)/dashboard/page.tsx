@@ -11,7 +11,12 @@ export default function DashboardPage() {
 
   if (isLoading) return <LoadingPage />;
 
-  const s = summary?.kpis || {};
+  const s = summary?.kpis ?? {
+    total_requests: 0,
+    total_cost: 0,
+    avg_latency_ms: 0,
+    error_rate: 0,
+  };
 
   return (
     <div className="page-container">
