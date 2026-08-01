@@ -85,9 +85,28 @@ def test_activate_declares_a_409(spec: dict) -> None:
     assert "200" in responses
 
 
+def _iter_routes(routes):
+    """Starlette >=1.0 nests included routers as `_IncludedRouter` wrappers
+    instead of flattening them into `app.routes`, so a plain scan misses
+    anything mounted via `include_router` (including nested ones, like `/ws`
+    under `api_router`). Recurse through `original_router.routes` to reach
+    the real route objects.
+    """
+    for route in routes:
+        nested = getattr(route, "original_router", None)
+        if nested is not None:
+            yield from _iter_routes(nested.routes)
+        else:
+            yield route
+
+
 def test_websocket_route_exists() -> None:
     app = create_app()
-    ws_routes = [route for route in app.routes if getattr(route, "path", None) == "/ws"]
+    ws_routes = [
+        route
+        for route in _iter_routes(app.routes)
+        if getattr(route, "path", None) == "/ws"
+    ]
     assert ws_routes, "/ws WebSocket hub is not registered"
 
 
