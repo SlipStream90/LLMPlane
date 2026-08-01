@@ -90,7 +90,9 @@ class UpstreamProblem(ProblemException):
     failed. Distinguished from our own 500s so operators can tell whose fault
     an incident is."""
 
-    def __init__(self, detail: str, status_code: int = status.HTTP_502_BAD_GATEWAY) -> None:
+    def __init__(
+        self, detail: str, status_code: int = status.HTTP_502_BAD_GATEWAY
+    ) -> None:
         super().__init__(
             status_code,
             detail,

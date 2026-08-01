@@ -19,7 +19,8 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -30,7 +31,7 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
 
-    projects: Mapped[list["Project"]] = relationship(
+    projects: Mapped[list[Project]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
 
@@ -49,7 +50,7 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     organization: Mapped[Organization] = relationship(back_populates="projects")
-    api_keys: Mapped[list["APIKey"]] = relationship(
+    api_keys: Mapped[list[APIKey]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
 
@@ -62,9 +63,7 @@ class APIKey(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """
 
     __tablename__ = "api_key"
-    __table_args__ = (
-        Index("ix_api_key_project_prefix", "project_id", "key_prefix"),
-    )
+    __table_args__ = (Index("ix_api_key_project_prefix", "project_id", "key_prefix"),)
 
     project_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),

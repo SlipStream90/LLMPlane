@@ -53,7 +53,9 @@ def _model(provider: Provider, model_id: str, **kwargs) -> ProviderModel:
     return model
 
 
-def _policy(strategy: RoutingStrategy, config: dict, allowlist: list[str]) -> RoutingPolicy:
+def _policy(
+    strategy: RoutingStrategy, config: dict, allowlist: list[str]
+) -> RoutingPolicy:
     return RoutingPolicy(
         id=uuid.uuid4(),
         project_id=uuid.uuid4(),
@@ -70,7 +72,9 @@ def service() -> RoutingConfigService:
     return RoutingConfigService(session=None)  # type: ignore[arg-type]
 
 
-def test_rendered_config_never_contains_a_plaintext_key(service, tmp_path, monkeypatch) -> None:
+def test_rendered_config_never_contains_a_plaintext_key(
+    service, tmp_path, monkeypatch
+) -> None:
     credentials = CredentialService()
     provider = _provider(credentials_encrypted=credentials.encrypt({"api_key": SECRET}))
     models = [_model(provider, "gpt-4.1")]
@@ -84,7 +88,8 @@ def test_rendered_config_never_contains_a_plaintext_key(service, tmp_path, monke
         service.settings, "litellm_config_path", str(tmp_path / "config.yaml")
     )
     path = service.write_config_file(document)
-    written = open(path, encoding="utf-8").read()
+    with open(path, encoding="utf-8") as f:
+        written = f.read()
 
     assert SECRET not in written
     assert "os.environ/" in written
@@ -98,17 +103,23 @@ def test_live_push_document_carries_the_real_credential(service) -> None:
     credentials = CredentialService()
     provider = _provider(credentials_encrypted=credentials.encrypt({"api_key": SECRET}))
     models = [_model(provider, "gpt-4.1")]
-    document = service.render(_policy(RoutingStrategy.CHEAPEST, {}, ["gpt-4.1"]), models)
+    document = service.render(
+        _policy(RoutingStrategy.CHEAPEST, {}, ["gpt-4.1"]), models
+    )
 
     live = service._with_live_credentials(document, models)
 
     assert live["model_list"][0]["litellm_params"]["api_key"] == SECRET
     # The original document must not be mutated by building the live copy.
-    assert document["model_list"][0]["litellm_params"]["api_key"].startswith("os.environ/")
+    assert document["model_list"][0]["litellm_params"]["api_key"].startswith(
+        "os.environ/"
+    )
 
 
 def test_local_providers_get_an_api_base_and_no_key(service) -> None:
-    provider = _provider(ProviderType.OLLAMA, base_url="http://host.docker.internal:11500")
+    provider = _provider(
+        ProviderType.OLLAMA, base_url="http://host.docker.internal:11500"
+    )
     models = [_model(provider, "llama3.1:8b")]
 
     params = service.render(

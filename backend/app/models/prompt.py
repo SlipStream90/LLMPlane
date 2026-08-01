@@ -11,7 +11,8 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -32,7 +33,7 @@ class Prompt(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    versions: Mapped[list["PromptVersion"]] = relationship(
+    versions: Mapped[list[PromptVersion]] = relationship(
         back_populates="prompt",
         cascade="all, delete-orphan",
         order_by="PromptVersion.version_number",

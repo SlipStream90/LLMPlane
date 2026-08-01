@@ -70,7 +70,7 @@ class RequestRepository(BaseRepository[Request]):
         until = until or datetime.now(timezone.utc)
         stmt = select(
             func.count().label("total"),
-            func.coalesce(func.sum(Request.cost_usd), Decimal("0")).label("cost"),
+            func.coalesce(func.sum(Request.cost_usd), Decimal(0)).label("cost"),
             func.coalesce(func.avg(Request.latency_ms), 0).label("avg_latency"),
             func.coalesce(
                 func.sum(Request.input_tokens + Request.output_tokens), 0
@@ -93,7 +93,9 @@ class RequestRepository(BaseRepository[Request]):
             "avg_latency_ms": float(row.avg_latency),
             "tokens_used": int(row.tokens),
             "success_rate_pct": round(successes / total * 100, 2) if total else 100.0,
-            "error_rate_pct": round((total - successes) / total * 100, 2) if total else 0.0,
+            "error_rate_pct": round((total - successes) / total * 100, 2)
+            if total
+            else 0.0,
             "requests_per_minute": round(total / window_minutes, 2),
         }
 
@@ -104,7 +106,7 @@ class RequestRepository(BaseRepository[Request]):
             select(
                 Request.model_id,
                 func.count().label("request_count"),
-                func.coalesce(func.sum(Request.cost_usd), Decimal("0")).label("cost"),
+                func.coalesce(func.sum(Request.cost_usd), Decimal(0)).label("cost"),
                 func.coalesce(
                     func.sum(Request.input_tokens + Request.output_tokens), 0
                 ).label("tokens"),
@@ -131,7 +133,7 @@ class RequestRepository(BaseRepository[Request]):
             select(
                 Provider.provider_type,
                 func.count().label("request_count"),
-                func.coalesce(func.sum(Request.cost_usd), Decimal("0")).label("cost"),
+                func.coalesce(func.sum(Request.cost_usd), Decimal(0)).label("cost"),
             )
             .join(Provider, Provider.id == Request.provider_id)
             .where(Request.project_id == project_id, Request.requested_at >= since)
@@ -156,18 +158,22 @@ class RequestRepository(BaseRepository[Request]):
         granularity: Granularity = "hour",
     ) -> list[dict[str, Any]]:
         until = until or datetime.now(timezone.utc)
-        bucket = func.date_trunc(_TRUNC[granularity], Request.requested_at).label("bucket")
+        bucket = func.date_trunc(_TRUNC[granularity], Request.requested_at).label(
+            "bucket"
+        )
         stmt = (
             select(
                 bucket,
                 func.count().label("request_count"),
-                func.coalesce(func.sum(Request.cost_usd), Decimal("0")).label("cost"),
+                func.coalesce(func.sum(Request.cost_usd), Decimal(0)).label("cost"),
                 func.coalesce(func.avg(Request.latency_ms), 0).label("avg_latency"),
                 func.coalesce(
                     func.sum(Request.input_tokens + Request.output_tokens), 0
                 ).label("tokens"),
                 func.coalesce(
-                    func.sum(case((Request.status != RequestStatus.SUCCESS, 1), else_=0)),
+                    func.sum(
+                        case((Request.status != RequestStatus.SUCCESS, 1), else_=0)
+                    ),
                     0,
                 ).label("errors"),
             )
@@ -205,7 +211,7 @@ class RequestRepository(BaseRepository[Request]):
             Request.requested_at >= since,
             Request.requested_at < until,
         )
-        cost = func.coalesce(func.sum(Request.cost_usd), Decimal("0")).label("cost")
+        cost = func.coalesce(func.sum(Request.cost_usd), Decimal(0)).label("cost")
         count = func.count().label("request_count")
 
         if dimension == "model":
@@ -223,7 +229,9 @@ class RequestRepository(BaseRepository[Request]):
             )
         elif dimension == "day":
             day = func.date_trunc("day", Request.requested_at).label("key")
-            stmt = select(day, cost, count).where(base_where).group_by(day).order_by(day)
+            stmt = (
+                select(day, cost, count).where(base_where).group_by(day).order_by(day)
+            )
         else:  # tag — one row per distinct origin tag
             tag = func.jsonb_array_elements_text(Request.tags).label("key")
             stmt = select(tag, cost, count).where(base_where).group_by(tag)
@@ -252,10 +260,12 @@ class RequestRepository(BaseRepository[Request]):
             select(
                 Request.model_id,
                 func.count().label("request_count"),
-                func.coalesce(func.avg(Request.cost_usd), Decimal("0")).label("avg_cost"),
+                func.coalesce(func.avg(Request.cost_usd), Decimal(0)).label("avg_cost"),
                 func.coalesce(func.avg(Request.latency_ms), 0).label("avg_latency"),
                 func.coalesce(
-                    func.sum(case((Request.status == RequestStatus.SUCCESS, 1), else_=0)),
+                    func.sum(
+                        case((Request.status == RequestStatus.SUCCESS, 1), else_=0)
+                    ),
                     0,
                 ).label("successes"),
             )

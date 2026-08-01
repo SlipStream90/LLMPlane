@@ -15,7 +15,9 @@ from app.repositories.base import BaseRepository
 class OrganizationRepository(BaseRepository[Organization]):
     model = Organization
 
-    async def get_or_create_default(self, name: str = "Default Organization") -> Organization:
+    async def get_or_create_default(
+        self, name: str = "Default Organization"
+    ) -> Organization:
         """ADR-002: exactly one seeded organization row in alpha."""
         existing = (
             await self.session.execute(select(Organization).limit(1))

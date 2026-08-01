@@ -36,11 +36,9 @@ class RoutingPolicyCreate(BaseModel):
     model_allowlist: list[str] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def _validate_config(self) -> "RoutingPolicyCreate":
+    def _validate_config(self) -> RoutingPolicyCreate:
         missing = [
-            key
-            for key in REQUIRED_CONFIG_KEYS[self.strategy]
-            if key not in self.config
+            key for key in REQUIRED_CONFIG_KEYS[self.strategy] if key not in self.config
         ]
         if missing:
             raise ValueError(
@@ -50,7 +48,9 @@ class RoutingPolicyCreate(BaseModel):
         if self.strategy is RoutingStrategy.WEIGHTED:
             weights = self.config.get("weights")
             if not isinstance(weights, dict) or not weights:
-                raise ValueError("config.weights must be a non-empty {model_id: weight} map")
+                raise ValueError(
+                    "config.weights must be a non-empty {model_id: weight} map"
+                )
             unknown = set(weights) - set(self.model_allowlist)
             if unknown:
                 raise ValueError(

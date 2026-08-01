@@ -7,7 +7,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select as SASelect, func, select
+from sqlalchemy import Select as SASelect
+from sqlalchemy import func, select
 
 from app.models.benchmark import BenchmarkRunItem
 from app.models.evaluation import EvaluationResult
@@ -32,9 +33,7 @@ class EvaluationResultRepository(BaseRepository[EvaluationResult]):
         benchmark_run_id: uuid.UUID | None = None,
         since: datetime | None = None,
     ) -> SASelect[Any]:
-        stmt = select(EvaluationResult).where(
-            EvaluationResult.project_id == project_id
-        )
+        stmt = select(EvaluationResult).where(EvaluationResult.project_id == project_id)
         if metric_name:
             stmt = stmt.where(EvaluationResult.metric_name == metric_name)
         if metric_source:
@@ -111,7 +110,9 @@ class EvaluationResultRepository(BaseRepository[EvaluationResult]):
         since: datetime,
         granularity: str = "day",
     ) -> list[dict[str, Any]]:
-        bucket = func.date_trunc(granularity, EvaluationResult.created_at).label("bucket")
+        bucket = func.date_trunc(granularity, EvaluationResult.created_at).label(
+            "bucket"
+        )
         stmt = (
             select(bucket, func.avg(EvaluationResult.value).label("avg_value"))
             .where(

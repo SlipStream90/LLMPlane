@@ -92,9 +92,7 @@ async def upload_dataset(
     return BenchmarkDatasetOut.model_validate(dataset)
 
 
-@router.get(
-    "/{dataset_id}", response_model=BenchmarkDatasetOut, summary="Get dataset"
-)
+@router.get("/{dataset_id}", response_model=BenchmarkDatasetOut, summary="Get dataset")
 async def get_dataset(
     dataset_id: uuid.UUID, session: SessionDep, project: ProjectDep
 ) -> BenchmarkDatasetOut:

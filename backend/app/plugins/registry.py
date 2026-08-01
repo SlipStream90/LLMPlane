@@ -26,8 +26,13 @@ logger = logging.getLogger(__name__)
 
 _PROVIDERS_DIR = Path(__file__).parent / "providers"
 _REQUIRED_MANIFEST_KEYS = {
-    "id", "display_name", "auth_type", "default_base_url",
-    "requires_base_url", "capabilities", "module",
+    "id",
+    "display_name",
+    "auth_type",
+    "default_base_url",
+    "requires_base_url",
+    "capabilities",
+    "module",
 }
 _VALID_AUTH_TYPES = {"api_key", "none", "bearer_token"}
 
@@ -70,7 +75,7 @@ class PluginRegistry:
                     pricing_hint=raw.get("pricing_hint"),
                 )
                 module = importlib.import_module(raw["module"])
-                plugin_cls = getattr(module, "PLUGIN")
+                plugin_cls = module.PLUGIN
                 plugin: ProviderPlugin = plugin_cls(gateway)
                 plugin.manifest = manifest
                 await plugin.initialize()

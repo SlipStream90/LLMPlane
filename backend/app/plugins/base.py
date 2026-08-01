@@ -67,7 +67,7 @@ class ProviderPlugin(ABC):
         """Called once by the registry after discovery, before the plugin is
         exposed to callers. Default no-op; override for plugins that need to
         warm a cache or validate their manifest against a live schema."""
-        return None
+        return
 
     @abstractmethod
     async def health_check(
@@ -145,4 +145,4 @@ class ProviderPlugin(ABC):
     async def shutdown(self) -> None:
         """Called once at app shutdown (lifespan). Default no-op; override
         for a plugin that opened a persistent resource in initialize()."""
-        return None
+        return

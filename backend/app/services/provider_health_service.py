@@ -34,7 +34,10 @@ DEGRADED_LATENCY_MS = 3000
 _PROBE: dict[ProviderType, tuple[str, str]] = {
     ProviderType.OPENAI: ("https://api.openai.com/v1", "/models"),
     ProviderType.ANTHROPIC: ("https://api.anthropic.com/v1", "/models"),
-    ProviderType.GEMINI: ("https://generativelanguage.googleapis.com/v1beta", "/models"),
+    ProviderType.GEMINI: (
+        "https://generativelanguage.googleapis.com/v1beta",
+        "/models",
+    ),
     ProviderType.GROQ: ("https://api.groq.com/openai/v1", "/models"),
     ProviderType.MISTRAL: ("https://api.mistral.ai/v1", "/models"),
     ProviderType.COHERE: ("https://api.cohere.com/v1", "/models"),
@@ -59,7 +62,9 @@ class ProviderHealthService:
         self.session = session
         self.credentials = credentials or CredentialService()
 
-    async def check(self, provider: Provider, *, timeout_s: float = 10.0) -> HealthCheckResult:
+    async def check(
+        self, provider: Provider, *, timeout_s: float = 10.0
+    ) -> HealthCheckResult:
         """Probe one provider and persist the outcome."""
         result = await self._probe(provider, timeout_s)
         provider.health_status = result.status
@@ -68,7 +73,9 @@ class ProviderHealthService:
         await self.session.flush()
         return result
 
-    async def check_all(self, providers: list[Provider]) -> dict[str, HealthCheckResult]:
+    async def check_all(
+        self, providers: list[Provider]
+    ) -> dict[str, HealthCheckResult]:
         out: dict[str, HealthCheckResult] = {}
         for provider in providers:
             out[str(provider.id)] = await self.check(provider)
@@ -191,7 +198,9 @@ class ProviderHealthService:
                 now,
                 result.detail or f"Reachable but slow ({result.latency_ms} ms).",
             )
-        return HealthCheckResult(HealthStatus.HEALTHY, result.latency_ms, now, result.detail)
+        return HealthCheckResult(
+            HealthStatus.HEALTHY, result.latency_ms, now, result.detail
+        )
 
     def _auth_headers(self, provider: Provider) -> dict[str, str]:
         api_key = self.credentials.api_key_of(provider.credentials_encrypted)

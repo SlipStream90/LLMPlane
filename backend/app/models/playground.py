@@ -24,7 +24,7 @@ class PlaygroundComparison(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     temperature: Mapped[float] = mapped_column(Float, nullable=False, default=0.7)
 
-    responses: Mapped[list["PlaygroundResponse"]] = relationship(
+    responses: Mapped[list[PlaygroundResponse]] = relationship(
         back_populates="comparison", cascade="all, delete-orphan", lazy="selectin"
     )
 
@@ -45,7 +45,9 @@ class PlaygroundResponse(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     model_id: Mapped[str] = mapped_column(Text, nullable=False)
     request_id: Mapped[uuid.UUID | None] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("request.id", ondelete="SET NULL"), nullable=True
+        PgUUID(as_uuid=True),
+        ForeignKey("request.id", ondelete="SET NULL"),
+        nullable=True,
     )
     response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: Set when this model's call failed while others succeeded — a partial

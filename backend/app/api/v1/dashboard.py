@@ -29,7 +29,9 @@ from app.schemas.analytics import (
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
-@router.get("/summary", response_model=DashboardSummary, summary="Dashboard KPI summary")
+@router.get(
+    "/summary", response_model=DashboardSummary, summary="Dashboard KPI summary"
+)
 async def summary(session: SessionDep, project: ProjectDep) -> DashboardSummary:
     requests = RequestRepository(session)
     since = requests.start_of_today()

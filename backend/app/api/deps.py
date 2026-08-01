@@ -33,14 +33,14 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 class AuthContext:
     """The authenticated caller: a project plus the key that identified it."""
 
-    __slots__ = ("project", "api_key")
+    __slots__ = ("api_key", "project")
 
     def __init__(self, project: Project, api_key: APIKey) -> None:
         self.project = project
         self.api_key = api_key
 
     @property
-    def project_id(self):  # noqa: ANN201 - uuid.UUID, kept terse at call sites
+    def project_id(self):
         return self.project.id
 
     def has_scope(self, scope: str) -> bool:

@@ -85,7 +85,7 @@ async def get_trace(
     # Langfuse v3 public API uses HTTP Basic with public/secret key
     # (ARCHITECTURE.md 2 pins v3, not the v4 pre-release).
     token = base64.b64encode(
-        f"{settings.langfuse_public_key}:{settings.langfuse_secret_key}".encode("utf-8")
+        f"{settings.langfuse_public_key}:{settings.langfuse_secret_key}".encode()
     ).decode("ascii")
 
     try:

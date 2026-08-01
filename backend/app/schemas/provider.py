@@ -42,12 +42,10 @@ class ProviderCreate(BaseModel):
     plugin_id: str | None = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
-    def _require_credentials_where_needed(self) -> "ProviderCreate":
+    def _require_credentials_where_needed(self) -> ProviderCreate:
         if self.provider_type == ProviderType.CUSTOM:
             if not self.plugin_id:
-                raise ValueError(
-                    "plugin_id is required when provider_type is 'custom'"
-                )
+                raise ValueError("plugin_id is required when provider_type is 'custom'")
             return self
         if self.provider_type in _LOCAL_TYPES:
             if not self.base_url:
@@ -56,7 +54,9 @@ class ProviderCreate(BaseModel):
                     "(the local endpoint the gateway should call)"
                 )
         elif not self.api_key:
-            raise ValueError(f"api_key is required for '{self.provider_type}' providers")
+            raise ValueError(
+                f"api_key is required for '{self.provider_type}' providers"
+            )
         return self
 
 

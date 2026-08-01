@@ -9,14 +9,17 @@ from decimal import Decimal
 from sqlalchemy import (
     Boolean,
     DateTime,
-    Enum as SAEnum,
     ForeignKey,
     LargeBinary,
     Numeric,
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy import (
+    Enum as SAEnum,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -83,7 +86,7 @@ class Provider(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     last_latency_ms: Mapped[int | None] = mapped_column(nullable=True)
 
-    models: Mapped[list["ProviderModel"]] = relationship(
+    models: Mapped[list[ProviderModel]] = relationship(
         back_populates="provider", cascade="all, delete-orphan", lazy="selectin"
     )
 

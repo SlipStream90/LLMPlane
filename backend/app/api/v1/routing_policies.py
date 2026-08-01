@@ -41,7 +41,9 @@ async def create_policy(
 ) -> RoutingPolicyOut:
     repo = RoutingPolicyRepository(session)
     if any(p.name == payload.name for p in await repo.list_for_project(project.id)):
-        raise ConflictProblem(f"A routing policy named '{payload.name}' already exists.")
+        raise ConflictProblem(
+            f"A routing policy named '{payload.name}' already exists."
+        )
 
     # Validate the allowlist against the real catalog at write time. Creating a
     # policy that cannot be rendered would just move the failure to activation,
@@ -79,7 +81,9 @@ async def get_active_policy(
 async def get_policy(
     policy_id: uuid.UUID, session: SessionDep, project: ProjectDep
 ) -> RoutingPolicyOut:
-    policy = await RoutingPolicyRepository(session).get(policy_id, project_id=project.id)
+    policy = await RoutingPolicyRepository(session).get(
+        policy_id, project_id=project.id
+    )
     if policy is None:
         raise NotFoundProblem("Routing policy", policy_id)
     return RoutingPolicyOut.model_validate(policy)

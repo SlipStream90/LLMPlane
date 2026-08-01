@@ -66,7 +66,7 @@ async def publish_event(topic: str, event: str, data: dict[str, Any]) -> None:
     payload = json.dumps({"topic": topic, "event": event, "data": data})
     try:
         await get_redis().publish(topic, payload)
-    except Exception:  # noqa: BLE001 - deliberate fail-open on a notify path
+    except Exception:
         logger.warning(
             "Failed to publish event to Redis; live update dropped "
             "(topic=%s event=%s). API result is unaffected.",

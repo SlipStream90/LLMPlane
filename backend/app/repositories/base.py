@@ -15,9 +15,10 @@ from __future__ import annotations
 import base64
 import binascii
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Generic, Sequence, TypeVar
+from typing import Any, Generic, TypeVar
 
 from sqlalchemy import Select, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,14 +100,17 @@ class BaseRepository(Generic[ModelT]):
         query = query.order_by(self._order_col.desc(), self.model.id.desc())  # type: ignore[attr-defined]
         # Fetch one extra row to learn whether another page exists without a
         # second COUNT query.
-        rows = list((await self.session.execute(query.limit(limit + 1))).scalars().all())
+        rows = list(
+            (await self.session.execute(query.limit(limit + 1))).scalars().all()
+        )
 
         next_cursor = None
         if len(rows) > limit:
             rows = rows[:limit]
             last = rows[-1]
             next_cursor = encode_cursor(
-                getattr(last, self.order_column_name), last.id  # type: ignore[attr-defined]
+                getattr(last, self.order_column_name),
+                last.id,  # type: ignore[attr-defined]
             )
         return Page(data=rows, next_cursor=next_cursor)
 

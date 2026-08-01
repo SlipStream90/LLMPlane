@@ -29,7 +29,9 @@ router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 SortBy = Literal["cost", "latency", "judge_score", "reliability", "requests"]
 
 
-@router.get("", response_model=list[LeaderboardEntry], summary="Ranked model leaderboard")
+@router.get(
+    "", response_model=list[LeaderboardEntry], summary="Ranked model leaderboard"
+)
 async def leaderboard(
     session: SessionDep,
     project: ProjectDep,

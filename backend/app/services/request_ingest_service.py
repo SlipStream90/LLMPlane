@@ -227,7 +227,7 @@ async def consume_forever(stop_event: asyncio.Event | None = None) -> None:
                             service = RequestIngestService(session)
                             persisted = await service.ingest(message_id, fields)
                             await session.commit()
-                    except Exception:  # noqa: BLE001 - one bad event, not the loop
+                    except Exception:
                         logger.exception(
                             "Failed to ingest gateway completion event %s; "
                             "acknowledging to avoid a poison-message stall.",
@@ -286,7 +286,7 @@ def _decimal(value: Any) -> Decimal:
     try:
         return Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
-        return Decimal("0")
+        return Decimal(0)
 
 
 def _status(value: Any) -> RequestStatus:

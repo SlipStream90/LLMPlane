@@ -9,13 +9,13 @@ from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.benchmark import BenchmarkDataset, BenchmarkRun, BenchmarkRunItem
 from app.models.deployment import Deployment, GpuSample
 from app.models.enums import (
+    METRIC_NAME_ALLOWLIST,
     ApiKeyScope,
     DatasetFormat,
     DeploymentBackend,
     DeploymentStatus,
     HealthStatus,
     ItemStatus,
-    METRIC_NAME_ALLOWLIST,
     MetricSource,
     ProviderType,
     RequestStatus,
@@ -32,6 +32,7 @@ from app.models.routing import RoutingPolicy
 from app.models.tenancy import APIKey, Organization, Project
 
 __all__ = [
+    "METRIC_NAME_ALLOWLIST",
     "APIKey",
     "ApiKeyScope",
     "Base",
@@ -48,7 +49,6 @@ __all__ = [
     "GpuSample",
     "HealthStatus",
     "ItemStatus",
-    "METRIC_NAME_ALLOWLIST",
     "MetricSource",
     "Organization",
     "PlaygroundComparison",

@@ -67,9 +67,7 @@ class AnthropicPlugin(ProviderPlugin):
     ) -> list[DiscoveredModel]:
         target = (base_url or _DEFAULT_BASE_URL).rstrip("/")
         async with httpx.AsyncClient(timeout=timeout_s) as http:
-            response = await http.get(
-                f"{target}/v1/models", headers=_headers(api_key)
-            )
+            response = await http.get(f"{target}/v1/models", headers=_headers(api_key))
             response.raise_for_status()
             data = response.json().get("data", [])
         return [

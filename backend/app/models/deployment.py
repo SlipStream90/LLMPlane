@@ -7,7 +7,6 @@ from datetime import datetime
 
 from sqlalchemy import (
     DateTime,
-    Enum as SAEnum,
     Float,
     ForeignKey,
     Index,
@@ -59,7 +58,7 @@ class Deployment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     download_progress_pct: Mapped[int | None] = mapped_column(nullable=True)
 
-    samples: Mapped[list["GpuSample"]] = relationship(
+    samples: Mapped[list[GpuSample]] = relationship(
         back_populates="deployment", cascade="all, delete-orphan"
     )
 

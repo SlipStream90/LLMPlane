@@ -18,9 +18,7 @@ from app.services.dataset_service import (
 
 
 def test_parses_csv_with_a_bom() -> None:
-    raw = "﻿question,reference\nWhat is 2+2?,4\nCapital of France?,Paris\n".encode(
-        "utf-8"
-    )
+    raw = "﻿question,reference\nWhat is 2+2?,4\nCapital of France?,Paris\n".encode()
     parsed = parse_dataset(raw, DatasetFormat.CSV)
 
     assert parsed.columns == ["question", "reference"]

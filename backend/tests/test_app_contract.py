@@ -87,9 +87,7 @@ def test_activate_declares_a_409(spec: dict) -> None:
 
 def test_websocket_route_exists() -> None:
     app = create_app()
-    ws_routes = [
-        route for route in app.routes if getattr(route, "path", None) == "/ws"
-    ]
+    ws_routes = [route for route in app.routes if getattr(route, "path", None) == "/ws"]
     assert ws_routes, "/ws WebSocket hub is not registered"
 
 
@@ -110,7 +108,6 @@ def test_no_deprecated_event_handlers_are_used() -> None:
     offenders = [
         str(path)
         for path in backend_root.rglob("*.py")
-        if "on_event(" in path.read_text(encoding="utf-8")
-        and "tests" not in path.parts
+        if "on_event(" in path.read_text(encoding="utf-8") and "tests" not in path.parts
     ]
     assert not offenders, f"deprecated @app.on_event found in: {offenders}"

@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,7 +59,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "Gateway traffic will not appear in the dashboard while it is off."
         )
 
-    logger.info("%s startup complete (env=%s).", settings.app_name, settings.environment)
+    logger.info(
+        "%s startup complete (env=%s).", settings.app_name, settings.environment
+    )
     try:
         yield
     finally:
@@ -111,7 +113,9 @@ def create_app() -> FastAPI:
     try:
         from prometheus_fastapi_instrumentator import Instrumentator
 
-        Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+        Instrumentator().instrument(app).expose(
+            app, endpoint="/metrics", include_in_schema=False
+        )
     except ImportError:  # pragma: no cover - only in stripped environments
         logger.warning("prometheus_fastapi_instrumentator missing; /metrics disabled.")
 
@@ -146,7 +150,9 @@ def create_app() -> FastAPI:
         except Exception as exc:  # noqa: BLE001
             checks["redis"] = f"error: {exc}"
 
-        checks["tracing"] = "enabled" if getattr(app.state, "tracing_enabled", False) else "disabled"
+        checks["tracing"] = (
+            "enabled" if getattr(app.state, "tracing_enabled", False) else "disabled"
+        )
         checks["ready"] = all(
             v == "ok" for k, v in checks.items() if k in ("database", "redis")
         )

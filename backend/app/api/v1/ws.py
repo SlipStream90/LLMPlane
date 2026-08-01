@@ -30,8 +30,8 @@ import re
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 from redis.asyncio.client import PubSub
 
-from app.core.redis import get_redis
 from app.core.db import get_session_factory
+from app.core.redis import get_redis
 from app.repositories.tenancy import APIKeyRepository
 
 logger = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ class TopicSubscription:
             return
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001 - one socket dying is not a server error
+        except Exception:
             logger.exception("WebSocket relay failed; closing subscription pump.")
 
     async def close(self) -> None:
@@ -98,13 +98,13 @@ class TopicSubscription:
             self._relay.cancel()
             try:
                 await self._relay
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
+            except (asyncio.CancelledError, Exception):
+                logger.debug("Error while awaiting cancelled relay task", exc_info=True)
         try:
             if self.topics:
                 await self.pubsub.unsubscribe(*self.topics)
             await self.pubsub.aclose()
-        except Exception:  # noqa: BLE001 - teardown must not raise
+        except Exception:
             logger.debug("Error while closing pubsub", exc_info=True)
 
 

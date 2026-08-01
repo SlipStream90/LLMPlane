@@ -40,7 +40,7 @@ class BenchmarkRunCreate(BaseModel):
     judge_model_id: str | None = Field(default=None, max_length=200)
 
     @model_validator(mode="after")
-    def _validate_grid(self) -> "BenchmarkRunCreate":
+    def _validate_grid(self) -> BenchmarkRunCreate:
         if not self.temperatures:
             self.temperatures = [0.0]
         for t in self.temperatures:

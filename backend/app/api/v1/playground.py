@@ -14,8 +14,8 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-from fastapi import APIRouter, status
 import httpx
+from fastapi import APIRouter, status
 
 from app.api.deps import ProjectDep, SessionDep
 from app.core.config import get_settings
@@ -27,9 +27,9 @@ from app.repositories.playground import (
 )
 from app.repositories.provider import ProviderModelRepository
 from app.schemas.playground import (
-    PlaygroundComparisonOut,
     PlaygroundCompareRequest,
     PlaygroundCompareResponse,
+    PlaygroundComparisonOut,
     PlaygroundResponseItem,
     PlaygroundVoteRequest,
 )
@@ -78,7 +78,9 @@ async def compare(
     gateway = GatewayClient()
     # One shared connection pool across the fan-out; N models means N
     # concurrent requests, not N clients.
-    async with httpx.AsyncClient(timeout=settings.playground_per_model_timeout_s) as http:
+    async with httpx.AsyncClient(
+        timeout=settings.playground_per_model_timeout_s
+    ) as http:
         results: list[CompletionResult] = list(
             await asyncio.gather(
                 *(

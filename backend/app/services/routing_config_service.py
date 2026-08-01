@@ -58,6 +58,7 @@ LITELLM_STRATEGY: dict[RoutingStrategy, str] = {
     RoutingStrategy.FALLBACK: "simple-shuffle",
 }
 
+
 #: Env var name the gateway is expected to resolve for a provider's key.
 def env_var_name(provider: Provider) -> str:
     return f"LLMPLANE_PROVIDER_{provider.id.hex[:12].upper()}_API_KEY"
@@ -135,12 +136,17 @@ class RoutingConfigService:
                 # via the HTTP push below; the file on disk never holds one.
                 params["api_key"] = f"os.environ/{env_var_name(provider)}"
             if model.input_price_per_1m is not None:
-                params["input_cost_per_token"] = float(model.input_price_per_1m) / 1_000_000
+                params["input_cost_per_token"] = (
+                    float(model.input_price_per_1m) / 1_000_000
+                )
             if model.output_price_per_1m is not None:
                 params["output_cost_per_token"] = (
                     float(model.output_price_per_1m) / 1_000_000
                 )
-            if policy.strategy is RoutingStrategy.WEIGHTED and model.model_id in weights:
+            if (
+                policy.strategy is RoutingStrategy.WEIGHTED
+                and model.model_id in weights
+            ):
                 params["weight"] = weights[model.model_id]
             if policy.strategy is RoutingStrategy.LATENCY_THRESHOLD:
                 timeout_ms = policy.config.get("max_latency_ms")
@@ -213,7 +219,9 @@ class RoutingConfigService:
         fd, tmp_path = tempfile.mkstemp(dir=directory, suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                yaml.safe_dump(document, handle, sort_keys=False, default_flow_style=False)
+                yaml.safe_dump(
+                    document, handle, sort_keys=False, default_flow_style=False
+                )
             os.replace(tmp_path, path)
         except Exception:
             if os.path.exists(tmp_path):

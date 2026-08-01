@@ -13,7 +13,8 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -44,7 +45,7 @@ class BenchmarkDataset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         JSONB, nullable=False, default=list, server_default="[]"
     )
 
-    runs: Mapped[list["BenchmarkRun"]] = relationship(
+    runs: Mapped[list[BenchmarkRun]] = relationship(
         back_populates="dataset", cascade="all, delete-orphan"
     )
 
@@ -103,7 +104,7 @@ class BenchmarkRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     dataset: Mapped[BenchmarkDataset] = relationship(back_populates="runs")
-    items: Mapped[list["BenchmarkRunItem"]] = relationship(
+    items: Mapped[list[BenchmarkRunItem]] = relationship(
         back_populates="run", cascade="all, delete-orphan"
     )
 
@@ -136,7 +137,9 @@ class BenchmarkRunItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     temperature: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     request_id: Mapped[uuid.UUID | None] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("request.id", ondelete="SET NULL"), nullable=True
+        PgUUID(as_uuid=True),
+        ForeignKey("request.id", ondelete="SET NULL"),
+        nullable=True,
     )
     response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[ItemStatus] = mapped_column(

@@ -61,7 +61,10 @@ class TestRoutingPolicyCreate:
     def test_weighted_requires_weights(self) -> None:
         with pytest.raises(ValidationError, match="weights"):
             RoutingPolicyCreate(
-                name="p", strategy=RoutingStrategy.WEIGHTED, config={}, model_allowlist=["a"]
+                name="p",
+                strategy=RoutingStrategy.WEIGHTED,
+                config={},
+                model_allowlist=["a"],
             )
 
     def test_weights_must_reference_allowlisted_models(self) -> None:
@@ -106,7 +109,10 @@ class TestRoutingPolicyCreate:
     def test_an_empty_allowlist_is_rejected(self) -> None:
         with pytest.raises(ValidationError):
             RoutingPolicyCreate(
-                name="p", strategy=RoutingStrategy.CHEAPEST, config={}, model_allowlist=[]
+                name="p",
+                strategy=RoutingStrategy.CHEAPEST,
+                config={},
+                model_allowlist=[],
             )
 
     def test_phase2_strategies_are_not_selectable(self) -> None:
@@ -142,7 +148,9 @@ class TestProviderCreate:
         """Guards against a credential landing in a log line via an f-string of
         the model (Article XII)."""
         provider = ProviderCreate(
-            provider_type=ProviderType.OPENAI, display_name="OpenAI", api_key="sk-secret"
+            provider_type=ProviderType.OPENAI,
+            display_name="OpenAI",
+            api_key="sk-secret",
         )
         assert "sk-secret" not in repr(provider)
 

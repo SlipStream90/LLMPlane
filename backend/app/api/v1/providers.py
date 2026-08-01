@@ -97,16 +97,16 @@ async def create_provider(
             f"A provider named '{payload.display_name}' already exists in this project."
         )
 
-    if payload.provider_type == ProviderType.CUSTOM:
-        # payload.plugin_id presence is already guaranteed by ProviderCreate's
-        # validator; resolving it against the live registry is the one check
-        # that belongs at this layer, since only the route layer already
-        # holds a registry handle (schemas/provider.py's docstring on
-        # plugin_id explains why this isn't duplicated at the schema layer).
-        if get_plugin_registry().get(payload.plugin_id) is None:  # type: ignore[arg-type]
-            raise ConflictProblem(
-                f"No registered plugin with id '{payload.plugin_id}'."
-            )
+    # payload.plugin_id presence is already guaranteed by ProviderCreate's
+    # validator; resolving it against the live registry is the one check
+    # that belongs at this layer, since only the route layer already
+    # holds a registry handle (schemas/provider.py's docstring on
+    # plugin_id explains why this isn't duplicated at the schema layer).
+    if (
+        payload.provider_type == ProviderType.CUSTOM
+        and get_plugin_registry().get(payload.plugin_id) is None  # type: ignore[arg-type]
+    ):
+        raise ConflictProblem(f"No registered plugin with id '{payload.plugin_id}'.")
 
     credentials = CredentialService()
     blob = None
@@ -262,7 +262,10 @@ async def _create_model(
     endpoint (`POST /providers/{id}/models/bulk-confirm`) reuses the exact
     same validation/persistence logic in a loop rather than duplicating it.
     """
-    if any(m.model_id == payload.model_id for m in await repo.list_for_provider(provider_id)):
+    if any(
+        m.model_id == payload.model_id
+        for m in await repo.list_for_provider(provider_id)
+    ):
         raise ConflictProblem(
             f"Model '{payload.model_id}' is already registered under this provider."
         )
@@ -346,5 +349,3 @@ async def bulk_confirm_models(
         for model_payload in payload.models
     ]
     return [ProviderModelOut.model_validate(m) for m in created]
-
-

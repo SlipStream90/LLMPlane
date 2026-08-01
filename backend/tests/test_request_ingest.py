@@ -41,7 +41,7 @@ def test_int_or_none_distinguishes_absent_from_zero() -> None:
 
 @pytest.mark.parametrize(
     "value,expected",
-    [("0.0031", Decimal("0.0031")), (None, Decimal("0")), ("junk", Decimal("0"))],
+    [("0.0031", Decimal("0.0031")), (None, Decimal(0)), ("junk", Decimal(0))],
 )
 def test_decimal_coercion(value, expected) -> None:
     assert _decimal(value) == expected

@@ -5,7 +5,8 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import Float, ForeignKey, LargeBinary, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -26,7 +27,7 @@ class Experiment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         JSONB, nullable=False, default=list, server_default="[]"
     )
 
-    runs: Mapped[list["ExperimentRun"]] = relationship(
+    runs: Mapped[list[ExperimentRun]] = relationship(
         back_populates="experiment", cascade="all, delete-orphan"
     )
 
@@ -57,7 +58,9 @@ class ExperimentRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     temperature: Mapped[float] = mapped_column(Float, nullable=False, default=0.7)
     seed: Mapped[int | None] = mapped_column(nullable=True)
     request_id: Mapped[uuid.UUID | None] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("request.id", ondelete="SET NULL"), nullable=True
+        PgUUID(as_uuid=True),
+        ForeignKey("request.id", ondelete="SET NULL"),
+        nullable=True,
     )
     response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 

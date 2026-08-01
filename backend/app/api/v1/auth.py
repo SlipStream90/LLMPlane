@@ -93,5 +93,7 @@ async def bootstrap_key(
 
     return BootstrapKeyResponse(
         project=ProjectOut.model_validate(project),
-        api_key=ApiKeyCreated(**ApiKeyOut.model_validate(api_key).model_dump(), key=raw_key),
+        api_key=ApiKeyCreated(
+            **ApiKeyOut.model_validate(api_key).model_dump(), key=raw_key
+        ),
     )

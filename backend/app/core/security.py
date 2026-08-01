@@ -19,7 +19,7 @@ import secrets
 import uuid
 
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
 KEY_NAMESPACE = "llcp"
 PREFIX_LENGTH = 8

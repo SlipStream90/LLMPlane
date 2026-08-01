@@ -120,7 +120,7 @@ def detect_format(filename: str, content_type: str | None) -> DatasetFormat:
     lowered = (filename or "").lower()
     if lowered.endswith(".csv"):
         return DatasetFormat.CSV
-    if lowered.endswith(".json") or lowered.endswith(".jsonl"):
+    if lowered.endswith((".json", ".jsonl")):
         return DatasetFormat.JSON
     if content_type:
         if "csv" in content_type:

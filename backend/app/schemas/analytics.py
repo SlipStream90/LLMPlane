@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.enums import RequestStatus
 from app.schemas.common import ORMModel
@@ -108,7 +108,7 @@ class TraceOut(ORMModel):
     input_tokens: int
     output_tokens: int
     error_message: str | None = None
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
     requested_at: datetime
 
 

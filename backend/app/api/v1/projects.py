@@ -50,7 +50,9 @@ async def create_project(
 
     organization_id = auth.project.organization_id
     if organization_id is None:  # defensive: schema requires it
-        organization_id = (await OrganizationRepository(session).get_or_create_default()).id
+        organization_id = (
+            await OrganizationRepository(session).get_or_create_default()
+        ).id
 
     project = await projects.add(
         Project(

@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 
 from app import workers_client
 from app.api.deps import ProjectDep, SessionDep
-from app.core.errors import ConflictProblem, NotFoundProblem
+from app.core.errors import ConflictProblem
 from app.models.enums import DeploymentStatus
 from app.repositories.deployment import DeploymentRepository, GpuSampleRepository
 from app.schemas.deployment import (
@@ -156,7 +156,7 @@ async def stream_logs(
     async def event_source() -> AsyncIterator[bytes]:
         yield b": stream open\n\n"
         async for payload in service.stream_logs(deployment_id):
-            yield f"data: {payload}\n\n".encode("utf-8")
+            yield f"data: {payload}\n\n".encode()
 
     return StreamingResponse(
         event_source(),
@@ -191,4 +191,6 @@ async def _gpu_available(session: SessionDep) -> bool:
     proxy that costs one indexed query — and it degrades to `False` on a
     CPU-only host, which is the behaviour infrastructure.md 3 asks for.
     """
-    return bool(await GpuSampleRepository(session).latest_host_samples(within_minutes=60))
+    return bool(
+        await GpuSampleRepository(session).latest_host_samples(within_minutes=60)
+    )

@@ -20,8 +20,8 @@ from __future__ import annotations
 
 import logging
 import os
-from contextlib import contextmanager
 from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from opentelemetry import trace
@@ -91,13 +91,15 @@ def configure_tracing(
             resource=Resource.create({"service.name": service_name})
         )
         provider.add_span_processor(
-            BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{endpoint.rstrip('/')}/v1/traces"))
+            BatchSpanProcessor(
+                OTLPSpanExporter(endpoint=f"{endpoint.rstrip('/')}/v1/traces")
+            )
         )
         trace.set_tracer_provider(provider)
         _configured = True
         logger.info("OTLP tracing enabled for '%s' -> %s", service_name, endpoint)
         return True
-    except Exception:  # noqa: BLE001 - telemetry must not break the service
+    except Exception:
         logger.exception(
             "Failed to configure OTLP tracing for '%s'; continuing without "
             "traces (degraded).",
@@ -146,7 +148,7 @@ def llm_span(
     ) as span:
         try:
             yield span
-        except Exception as exc:  # noqa: BLE001 - re-raised after recording
+        except Exception as exc:
             span.set_status(Status(StatusCode.ERROR, str(exc)))
             span.record_exception(exc)
             raise
@@ -162,7 +164,7 @@ def internal_span(name: str, **attributes: Any) -> Iterator[Span]:
     ) as span:
         try:
             yield span
-        except Exception as exc:  # noqa: BLE001 - re-raised after recording
+        except Exception as exc:
             span.set_status(Status(StatusCode.ERROR, str(exc)))
             span.record_exception(exc)
             raise

@@ -35,7 +35,9 @@ QUEUE_BENCHMARK = "benchmark"
 @lru_cache
 def get_celery() -> Celery:
     settings = get_settings()
-    app = Celery("llmplane-client", broker=settings.redis_url, backend=settings.redis_url)
+    app = Celery(
+        "llmplane-client", broker=settings.redis_url, backend=settings.redis_url
+    )
     app.conf.update(
         task_serializer="json",
         result_serializer="json",

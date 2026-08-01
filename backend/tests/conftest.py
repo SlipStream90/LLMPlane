@@ -18,13 +18,15 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 # Test-only Fernet key. Not a credential to anything real.
-os.environ.setdefault("FERNET_SECRET_KEY", "SFRyx2vEfa7l9GEXY7RXAtnRnJPYq1hAQ9v0RJ5hLxE=")
+os.environ.setdefault(
+    "FERNET_SECRET_KEY", "SFRyx2vEfa7l9GEXY7RXAtnRnJPYq1hAQ9v0RJ5hLxE="
+)
 os.environ.setdefault("BOOTSTRAP_ADMIN_TOKEN", "test-bootstrap-token")
 os.environ.setdefault("LITELLM_MASTER_KEY", "test-master-key")
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("ENABLE_STREAM_CONSUMER", "false")
 
-import pytest  # noqa: E402
+import pytest
 
 
 @pytest.fixture(scope="session")

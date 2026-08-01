@@ -78,7 +78,9 @@ async def get_prompt(
     return await _out(session, prompt)
 
 
-@router.patch("/{prompt_id}", response_model=PromptOut, summary="Update prompt metadata")
+@router.patch(
+    "/{prompt_id}", response_model=PromptOut, summary="Update prompt metadata"
+)
 async def update_prompt(
     prompt_id: uuid.UUID,
     payload: PromptUpdate,

@@ -47,7 +47,9 @@ class ExperimentRunRepository(BaseRepository[ExperimentRun]):
             stmt = stmt.where(ExperimentRun.provider_model_id == provider_model_id)
         return stmt
 
-    async def list_for_experiment(self, experiment_id: uuid.UUID) -> list[ExperimentRun]:
+    async def list_for_experiment(
+        self, experiment_id: uuid.UUID
+    ) -> list[ExperimentRun]:
         stmt = self.for_experiment_stmt(experiment_id).order_by(
             ExperimentRun.created_at.desc()
         )

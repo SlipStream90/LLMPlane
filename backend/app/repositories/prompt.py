@@ -38,7 +38,9 @@ class PromptRepository(BaseRepository[Prompt]):
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
     async def get_by_name(self, project_id: uuid.UUID, name: str) -> Prompt | None:
-        stmt = select(Prompt).where(Prompt.project_id == project_id, Prompt.name == name)
+        stmt = select(Prompt).where(
+            Prompt.project_id == project_id, Prompt.name == name
+        )
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
 

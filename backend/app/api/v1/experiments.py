@@ -170,5 +170,8 @@ async def create_run(
 async def _require_experiment(
     session, experiment_id: uuid.UUID, project_id: uuid.UUID
 ) -> None:
-    if await ExperimentRepository(session).get(experiment_id, project_id=project_id) is None:
+    if (
+        await ExperimentRepository(session).get(experiment_id, project_id=project_id)
+        is None
+    ):
         raise NotFoundProblem("Experiment", experiment_id)
