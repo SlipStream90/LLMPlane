@@ -11,6 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -31,9 +32,23 @@ class ProviderCreate(BaseModel):
     #: Provider-specific extras (Azure endpoint/deployment name, AWS region).
     #: Stored inside the same encrypted blob as the API key.
     extra_credentials: dict[str, str] | None = Field(default=None, repr=False)
+    #: Required when provider_type == CUSTOM; the plugin's manifest id
+    #: (PluginRegistry). Ignored otherwise. Only presence is validated here —
+    #: whether the id actually resolves in the live registry, and what that
+    #: plugin's manifest requires (base_url/auth_type), is checked at the
+    #: route layer (app/api/v1/providers.py), which is the only place that
+    #: already holds a registry handle. Duplicating that lookup here would
+    #: risk two different error shapes for the same failure.
+    plugin_id: str | None = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
     def _require_credentials_where_needed(self) -> "ProviderCreate":
+        if self.provider_type == ProviderType.CUSTOM:
+            if not self.plugin_id:
+                raise ValueError(
+                    "plugin_id is required when provider_type is 'custom'"
+                )
+            return self
         if self.provider_type in _LOCAL_TYPES:
             if not self.base_url:
                 raise ValueError(
@@ -67,6 +82,7 @@ class ProviderOut(ORMModel):
     #: Masked, e.g. "********a1b2". Never the full key.
     credential_hint: str | None = None
     has_credentials: bool = False
+    plugin_id: str | None = None
 
 
 class ProviderModelCreate(BaseModel):
@@ -96,3 +112,37 @@ class ProviderHealthOut(BaseModel):
     latency_ms: int | None = None
     checked_at: datetime
     detail: str | None = None
+
+
+class PluginManifestOut(BaseModel):
+    """Response shape for `GET /providers/plugins` — 1:1 with
+    `app.plugins.base.ProviderManifest`, exposed to the wizard's
+    provider-type picker."""
+
+    id: str
+    display_name: str
+    auth_type: Literal["api_key", "none", "bearer_token"]
+    default_base_url: str | None
+    requires_base_url: bool
+    capabilities: list[str]
+    pricing_hint: dict[str, Any] | None = None
+
+
+class DiscoveredModelOut(BaseModel):
+    model_id: str
+    display_name: str
+    context_window: int | None = None
+    capabilities: list[str] = Field(default_factory=list)
+
+
+class ModelDiscoveryOut(BaseModel):
+    provider_id: uuid.UUID
+    models: list[DiscoveredModelOut]
+
+
+class BulkModelConfirm(BaseModel):
+    """Wizard's final "confirm selected models" step — the user-reviewed
+    subset of `ModelDiscoveryOut.models`, reusing the existing
+    `ProviderModelCreate` shape per item."""
+
+    models: list[ProviderModelCreate] = Field(min_length=1)

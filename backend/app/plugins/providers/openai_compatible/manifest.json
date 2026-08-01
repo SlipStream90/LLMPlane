@@ -1,0 +1,10 @@
+{
+  "id": "openai_compatible",
+  "display_name": "OpenAI-Compatible Endpoint",
+  "auth_type": "api_key",
+  "default_base_url": null,
+  "requires_base_url": true,
+  "capabilities": ["chat", "streaming"],
+  "pricing_hint": null,
+  "module": "app.plugins.providers.openai_compatible.plugin"
+}

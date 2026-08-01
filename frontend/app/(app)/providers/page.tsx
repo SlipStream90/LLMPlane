@@ -2,6 +2,7 @@
 
 import { useProviders, useDeleteProvider } from "@/hooks/useProviders";
 import { GlassCard, StatusBadge, LoadingPage } from "@/components/ui/cards";
+import { ProviderWizard } from "@/components/provider-wizard";
 import { Plus, RefreshCw, Trash2, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
@@ -36,19 +37,21 @@ export default function ProvidersPage() {
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
-                  <span className="text-lg font-bold capitalize">{p.type[0]}</span>
+                  <span className="text-lg font-bold capitalize">{p.provider_type[0]}</span>
                 </div>
                 <div>
-                  <h3 className="font-semibold">{p.name}</h3>
-                  <p className="text-sm text-muted-foreground capitalize">{p.type}</p>
+                  <h3 className="font-semibold">{p.display_name}</h3>
+                  <p className="text-sm text-muted-foreground capitalize">{p.provider_type}</p>
                 </div>
               </div>
-              <StatusBadge status={p.status} />
+              <StatusBadge status={p.health_status} />
             </div>
             <div className="mt-4 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Models</span>
-                <span className="font-medium">{p.models.length}</span>
+                <span className="text-muted-foreground">Endpoint</span>
+                <span className="font-medium truncate max-w-[60%]" title={p.base_url ?? undefined}>
+                  {p.base_url || "default"}
+                </span>
               </div>
             </div>
             <div className="mt-4 flex gap-2">
@@ -76,6 +79,8 @@ export default function ProvidersPage() {
           </GlassCard>
         )}
       </div>
+
+      <ProviderWizard open={showForm} onClose={() => setShowForm(false)} />
     </div>
   );
 }

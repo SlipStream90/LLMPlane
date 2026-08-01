@@ -40,6 +40,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     init_engine()
     init_redis()
+    from app.plugins.registry import get_plugin_registry
+    from app.services.gateway_client import GatewayClient
+
+    await get_plugin_registry().discover(GatewayClient())
     tracing_enabled = configure_tracing(
         settings.otel_service_name, settings.otel_exporter_otlp_endpoint
     )
@@ -67,6 +71,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             except asyncio.CancelledError:
                 pass
         await close_redis()
+        await get_plugin_registry().shutdown()
         await dispose_engine()
         logger.info("Shutdown complete.")
 

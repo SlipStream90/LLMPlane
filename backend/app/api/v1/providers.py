@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 
 from fastapi import APIRouter, status
 
 from app.api.deps import ProjectDep, SessionDep
 from app.core.errors import ConflictProblem, NotFoundProblem
-from app.models.enums import LOCAL_PROVIDER_TYPES
+from app.models.enums import LOCAL_PROVIDER_TYPES, ProviderType
 from app.models.provider import Provider, ProviderModel
+from app.plugins.registry import get_plugin_registry
 from app.repositories.provider import ProviderModelRepository, ProviderRepository
 from app.schemas.provider import (
+    BulkModelConfirm,
+    ModelDiscoveryOut,
+    PluginManifestOut,
     ProviderCreate,
     ProviderHealthOut,
     ProviderModelCreate,
@@ -64,6 +69,18 @@ async def list_all_models(
     return [ProviderModelOut.model_validate(m) for m in models]
 
 
+@router.get(
+    "/plugins",
+    response_model=list[PluginManifestOut],
+    summary="List registered provider plugins",
+)
+async def list_plugins() -> list[PluginManifestOut]:
+    """Declared before `/{provider_id}` for the same route-ordering reason as
+    `/model-catalog` above. Feeds the wizard's provider-type picker."""
+    manifests = get_plugin_registry().list_manifests()
+    return [PluginManifestOut(**dataclasses.asdict(manifest)) for manifest in manifests]
+
+
 @router.post(
     "",
     response_model=ProviderOut,
@@ -80,6 +97,17 @@ async def create_provider(
             f"A provider named '{payload.display_name}' already exists in this project."
         )
 
+    if payload.provider_type == ProviderType.CUSTOM:
+        # payload.plugin_id presence is already guaranteed by ProviderCreate's
+        # validator; resolving it against the live registry is the one check
+        # that belongs at this layer, since only the route layer already
+        # holds a registry handle (schemas/provider.py's docstring on
+        # plugin_id explains why this isn't duplicated at the schema layer).
+        if get_plugin_registry().get(payload.plugin_id) is None:  # type: ignore[arg-type]
+            raise ConflictProblem(
+                f"No registered plugin with id '{payload.plugin_id}'."
+            )
+
     credentials = CredentialService()
     blob = None
     creds = credentials.build(payload.api_key, payload.extra_credentials)
@@ -93,6 +121,7 @@ async def create_provider(
             display_name=payload.display_name,
             credentials_encrypted=blob,
             base_url=payload.base_url,
+            plugin_id=payload.plugin_id,
             is_active=True,
         )
     )
@@ -220,12 +249,24 @@ async def create_provider_model(
         raise NotFoundProblem("Provider", provider_id)
 
     repo = ProviderModelRepository(session)
+    model = await _create_model(repo, provider_id, payload)
+    return ProviderModelOut.model_validate(model)
+
+
+async def _create_model(
+    repo: ProviderModelRepository, provider_id: uuid.UUID, payload: ProviderModelCreate
+) -> ProviderModel:
+    """Shared insert path for a single `ProviderModel` row.
+
+    Factored out of `create_provider_model` so the wizard's bulk-confirm
+    endpoint (`POST /providers/{id}/models/bulk-confirm`) reuses the exact
+    same validation/persistence logic in a loop rather than duplicating it.
+    """
     if any(m.model_id == payload.model_id for m in await repo.list_for_provider(provider_id)):
         raise ConflictProblem(
             f"Model '{payload.model_id}' is already registered under this provider."
         )
-
-    model = await repo.add(
+    return await repo.add(
         ProviderModel(
             provider_id=provider_id,
             model_id=payload.model_id,
@@ -236,6 +277,74 @@ async def create_provider_model(
             capabilities=payload.capabilities,
         )
     )
-    return ProviderModelOut.model_validate(model)
+
+
+@router.post(
+    "/{provider_id}/discover-models",
+    response_model=ModelDiscoveryOut,
+    summary="Discover models via the provider's plugin (read-only)",
+)
+async def discover_models(
+    provider_id: uuid.UUID, session: SessionDep, project: ProjectDep
+) -> ModelDiscoveryOut:
+    """Read-only model catalog discovery against the provider's own API.
+
+    Does **not** persist anything — the wizard reviews/edits the result and
+    calls `bulk-confirm` (below) to actually register the chosen models.
+    """
+    provider = await ProviderRepository(session).get(provider_id, project_id=project.id)
+    if provider is None:
+        raise NotFoundProblem("Provider", provider_id)
+    if not provider.plugin_id:
+        raise NotFoundProblem("Plugin for provider", provider_id)
+
+    plugin = get_plugin_registry().get(provider.plugin_id)
+    if plugin is None:
+        raise NotFoundProblem("Plugin", provider.plugin_id)
+
+    credentials = CredentialService()
+    api_key = credentials.api_key_of(provider.credentials_encrypted)
+    discovered = await plugin.list_models(base_url=provider.base_url, api_key=api_key)
+    return ModelDiscoveryOut(
+        provider_id=provider.id,
+        models=[
+            {
+                "model_id": m.model_id,
+                "display_name": m.display_name,
+                "context_window": m.context_window,
+                "capabilities": m.capabilities,
+            }
+            for m in discovered
+        ],
+    )
+
+
+@router.post(
+    "/{provider_id}/models/bulk-confirm",
+    response_model=list[ProviderModelOut],
+    status_code=status.HTTP_201_CREATED,
+    summary="Register the wizard's reviewed model selection",
+)
+async def bulk_confirm_models(
+    provider_id: uuid.UUID,
+    payload: BulkModelConfirm,
+    session: SessionDep,
+    project: ProjectDep,
+) -> list[ProviderModelOut]:
+    """Wizard's final step: persist the user-reviewed subset of
+    `discover-models`' output. Loops over the same single-model insert path
+    `POST /providers/{id}/models` uses (`_create_model`) — no new persistence
+    logic, per R2/R4 additive-only.
+    """
+    provider = await ProviderRepository(session).get(provider_id, project_id=project.id)
+    if provider is None:
+        raise NotFoundProblem("Provider", provider_id)
+
+    repo = ProviderModelRepository(session)
+    created = [
+        await _create_model(repo, provider_id, model_payload)
+        for model_payload in payload.models
+    ]
+    return [ProviderModelOut.model_validate(m) for m in created]
 
 

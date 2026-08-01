@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import HealthStatus, ProviderType
 from app.models.provider import Provider
+from app.plugins.registry import get_plugin_registry
 from app.services.credential_service import CredentialService
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,24 @@ class ProviderHealthService:
                 "verify through a gateway completion instead.",
             )
 
-        default_base, path = _PROBE[provider.provider_type]
+        if provider.plugin_id:
+            return await self._probe_via_plugin(provider, now, timeout_s)
+
+        probe_entry = _PROBE.get(provider.provider_type)
+        if probe_entry is None:
+            # No plugin backing this provider and no static probe entry
+            # either (e.g. a first-party type added without a probe, or a
+            # CUSTOM provider whose plugin_id somehow went missing). Honest
+            # "unknown" beats a false "healthy", matching the
+            # Azure/Bedrock pattern above.
+            return HealthCheckResult(
+                HealthStatus.UNKNOWN,
+                None,
+                now,
+                f"No generic health probe for '{provider.provider_type}'.",
+            )
+
+        default_base, path = probe_entry
         base_url = (provider.base_url or default_base).rstrip("/")
         headers = self._auth_headers(provider)
 
@@ -142,6 +160,38 @@ class ProviderHealthService:
             return HealthCheckResult(
                 HealthStatus.DOWN, None, now, f"Unreachable: {exc}"
             )
+
+    async def _probe_via_plugin(
+        self, provider: Provider, now: datetime, timeout_s: float
+    ) -> HealthCheckResult:
+        """Delegate to the plugin named by `provider.plugin_id` (ADR-003
+        consequence #1). Falls back to `UNKNOWN` — never `KeyError` — if the
+        plugin isn't registered, matching the existing Azure/Bedrock honesty
+        pattern rather than raising out of a health poll."""
+        plugin = get_plugin_registry().get(provider.plugin_id)  # type: ignore[arg-type]
+        if plugin is None:
+            return HealthCheckResult(
+                HealthStatus.UNKNOWN,
+                None,
+                now,
+                f"Plugin '{provider.plugin_id}' is not registered — cannot probe.",
+            )
+        api_key = self.credentials.api_key_of(provider.credentials_encrypted)
+        result = await plugin.health_check(
+            base_url=provider.base_url, api_key=api_key, timeout_s=timeout_s
+        )
+        if not result.healthy:
+            return HealthCheckResult(
+                HealthStatus.DOWN, result.latency_ms, now, result.detail
+            )
+        if result.latency_ms is not None and result.latency_ms > DEGRADED_LATENCY_MS:
+            return HealthCheckResult(
+                HealthStatus.DEGRADED,
+                result.latency_ms,
+                now,
+                result.detail or f"Reachable but slow ({result.latency_ms} ms).",
+            )
+        return HealthCheckResult(HealthStatus.HEALTHY, result.latency_ms, now, result.detail)
 
     def _auth_headers(self, provider: Provider) -> dict[str, str]:
         api_key = self.credentials.api_key_of(provider.credentials_encrypted)

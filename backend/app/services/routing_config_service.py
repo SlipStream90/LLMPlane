@@ -313,6 +313,13 @@ def _litellm_model_name(model: ProviderModel, provider: Provider) -> str:
         ProviderType.AWS_BEDROCK: "bedrock",
         ProviderType.OLLAMA: "ollama",
         ProviderType.VLLM: "hosted_vllm",
+        # A CUSTOM provider is always plugin-backed; LiteLLM has no fixed
+        # vendor prefix for it, so it is routed as a generic OpenAI-schema
+        # endpoint (the only shape this slice's plugins speak — see
+        # ADR-002's rejected-alternatives note on `custom_llm_provider`).
+        # Plugins with a genuinely different wire format are a later slice's
+        # problem, not this dict's.
+        ProviderType.CUSTOM: "openai",
     }[provider.provider_type]
     return f"{prefix}/{model.model_id}"
 

@@ -1,0 +1,10 @@
+{
+  "id": "ollama",
+  "display_name": "Ollama (local)",
+  "auth_type": "none",
+  "default_base_url": "http://localhost:11434",
+  "requires_base_url": true,
+  "capabilities": ["chat"],
+  "pricing_hint": {"input_per_1m": 0.0, "output_per_1m": 0.0},
+  "module": "app.plugins.providers.ollama.plugin"
+}

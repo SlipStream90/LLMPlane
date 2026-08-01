@@ -49,6 +49,14 @@ class Provider(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
 
+    #: Set when this provider is backed by a plugin (any plugin-registered
+    #: type, including CUSTOM and first-party plugins like "ollama"). Null
+    #: for providers created before the plugin system existed, or for a
+    #: first-party type with no plugin equivalent. References
+    #: PluginRegistry manifest ids, not a DB foreign key — the registry is
+    #: process-local and file-defined, not a table (R2).
+    plugin_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     #: Fernet-encrypted JSON blob (API key + provider-specific fields such as
     #: an Azure endpoint/deployment name). Never returned by any API response
     #: and never logged (Article XII). See services/credential_service.py.

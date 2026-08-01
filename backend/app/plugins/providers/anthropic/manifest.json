@@ -1,0 +1,10 @@
+{
+  "id": "anthropic",
+  "display_name": "Anthropic",
+  "auth_type": "api_key",
+  "default_base_url": "https://api.anthropic.com",
+  "requires_base_url": false,
+  "capabilities": ["chat"],
+  "pricing_hint": null,
+  "module": "app.plugins.providers.anthropic.plugin"
+}

@@ -22,6 +22,10 @@ class ProviderType(StrEnum):
     AWS_BEDROCK = "aws_bedrock"
     OLLAMA = "ollama"
     VLLM = "vllm"
+    #: Generic escape hatch for any provider backed by a plugin that isn't one
+    #: of the first-party types above (ADR-003). Real identity/behavior comes
+    #: from `Provider.plugin_id`, not from proliferating enum values.
+    CUSTOM = "custom"
 
 
 #: Providers backed by a locally-deployed container rather than a hosted API.
