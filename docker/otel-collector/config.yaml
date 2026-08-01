@@ -1,0 +1,38 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8888"
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  logging:
+    loglevel: warn
+
+  # Send traces to Langfuse via OTLP
+  otlphttp:
+    endpoint: "http://langfuse:3000/api/public/otel/v1/traces"
+    headers:
+      Authorization: "Bearer ${LANGFUSE_PUBLIC_KEY}"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp, logging]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus, logging]

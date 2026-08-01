@@ -1,0 +1,32 @@
+model_list:
+  # Models will be dynamically populated by the backend's RoutingConfigService
+  # This is a template; the backend pushes config updates via /config/reload
+
+general_settings:
+  master_key: "sk-litellm-master-key"  # Overridden by LITELLM_MASTER_KEY env var
+  completion_model: "gpt-4o-mini"
+
+litellm_settings:
+  # Drop any unsupported params without error
+  drop_params: true
+  # Set request timeout
+  request_timeout: 600
+  # Enable streaming
+  stream: true
+  # Cache configuration
+  cache: true
+  cache_params:
+    type: "redis"
+    url: "redis://redis:6379/0"
+    ttl: 600
+
+router_settings:
+  routing_strategy: "simple-shuffle"
+  num_retries: 2
+  retry_after: 5
+  timeout: 600
+
+general_settings:
+  master_key: "sk-litellm-master-key"
+  disable_spend_logs: false
+  disable_error_logs: false
