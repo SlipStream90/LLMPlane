@@ -7,3 +7,20 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
     editable: false
+    jsonData:
+      timeInterval: "15s"
+
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: llmplane
+    user: llmplane
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD:-llmplane_dev}
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 10
+      maxIdleConns: 5
+      connMaxLifetime: 14400
+    editable: false

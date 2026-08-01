@@ -1,6 +1,5 @@
-version: "3.9"
-
 services:
+  # ── Infrastructure ──────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -11,46 +10,70 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U llmplane"]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
-      - internal
+      - llcp-internal
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
-      - internal
+      - llcp-internal
 
+  # ── Docker Socket Proxy ────────────────────────────────────────
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      EXEC: 0
+      VOLUMES: 0
+      NETWORKS: 0
+      INFO: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:2375:2375"
+    networks:
+      - llcp-internal
+
+  # ── LiteLLM Gateway ────────────────────────────────────────────
   gateway:
     image: ghcr.io/berriai/litellm:1.63.14
     restart: unless-stopped
     volumes:
-      - ./gateway/config.yaml:/app/config.yaml
+      - ./gateway/config.yaml:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     environment:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
-      - internal
-      - frontend
+      - llcp-internal
+      - llcp-public
 
+  # ── Backend API ────────────────────────────────────────────────
   backend:
     build:
       context: ../backend
@@ -66,19 +89,26 @@ services:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - ENABLE_STREAM_CONSUMER=true
+      - DOCKER_HOST=http://docker-socket-proxy:2375
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      docker-socket-proxy:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
-      - internal
-      - frontend
-    volumes:
-      - docker_socket:/var/run/docker.sock
+      - llcp-internal
+      - llcp-public
 
+  # ── Celery Workers ─────────────────────────────────────────────
   workers:
     build:
       context: ../workers
@@ -91,16 +121,23 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - FERNET_SECRET_KEY=${FERNET_SECRET_KEY}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - DOCKER_HOST=http://docker-socket-proxy:2375
     command: ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--concurrency=4"]
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      docker-socket-proxy:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "celery", "-A", "celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
-      - internal
+      - llcp-internal
     volumes:
-      - docker_socket:/var/run/docker.sock
       - benchmark_uploads:/app/benchmark_uploads
     deploy:
       resources:
@@ -110,6 +147,7 @@ services:
               count: all
               capabilities: [gpu]
 
+  # ── Celery Beat Scheduler ──────────────────────────────────────
   scheduler:
     build:
       context: ../workers
@@ -128,95 +166,102 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "celery", "-A", "celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
-      - internal
+      - llcp-internal
 
+  # ── Frontend ───────────────────────────────────────────────────
   frontend:
     build:
       context: ../frontend
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:8000/api/v1
       - NEXT_PUBLIC_WS_URL=ws://backend:8000/ws
       - NEXT_PUBLIC_GATEWAY_URL=http://gateway:4000
     depends_on:
       backend:
-        condition: service_started
-    networks:
-      - frontend
-
-  langfuse:
-    image: langfuse/langfuse:3
-    restart: unless-stopped
-    environment:
-      - DATABASE_URL=postgresql://llmplane:${POSTGRES_PASSWORD:-llmplane_dev}@postgres:5432/llmplane
-      - REDIS_URL=redis://redis:6379/0
-      - NEXTAUTH_URL=http://localhost:3010
-      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET}
-      - SALT=${LANGFUSE_SALT}
-    ports:
-      - "3010:3000"
-    depends_on:
-      postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
-      - internal
-      - frontend
+      - llcp-public
 
+  # ── Observability ──────────────────────────────────────────────
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.53.0
     restart: unless-stopped
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
-      - internal
+      - llcp-internal
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.1.0
     restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
-      - internal
-      - frontend
+      - llcp-internal
+      - llcp-public
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.104.0
     restart: unless-stopped
     volumes:
-      - ./otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml
+      - ./otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
     ports:
-      - "4317:4317"
-      - "4318:4318"
-      - "8888:8888"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:8888:8888"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8888/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
-      - internal
+      - llcp-internal
 
 volumes:
   postgres_data:
   prometheus_data:
   grafana_data:
-  docker_socket:
   benchmark_uploads:
 
 networks:
-  internal:
+  llcp-internal:
     driver: bridge
-  frontend:
+  llcp-public:
     driver: bridge

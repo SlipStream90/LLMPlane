@@ -20,18 +20,18 @@ exporters:
   logging:
     loglevel: warn
 
-  # Send traces to Langfuse via OTLP
-  otlphttp:
-    endpoint: "http://langfuse:3000/api/public/otel/v1/traces"
+  # Send traces to Langfuse Cloud via OTLP/HTTP
+  otlphttp/langfuse:
+    endpoint: "https://cloud.langfuse.com/api/otel"
     headers:
-      Authorization: "Bearer ${LANGFUSE_PUBLIC_KEY}"
+      Authorization: "Basic ${LANGFUSE_AUTH_HEADER}"
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlphttp, logging]
+      exporters: [otlphttp/langfuse, logging]
     metrics:
       receivers: [otlp]
       processors: [batch]

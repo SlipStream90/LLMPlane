@@ -1,90 +1,84 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer base {
-  :root {
-    --background: 222 47% 6%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 8%;
-    --card-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 6%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 217 91% 60%;
-    --radius: 0.75rem;
-  }
+@theme {
+  --color-background: oklch(0.145 0.017 260);
+  --color-foreground: oklch(0.93 0.006 260);
+  --color-card: oklch(0.175 0.018 260);
+  --color-card-foreground: oklch(0.93 0.006 260);
+  --color-primary: oklch(0.58 0.22 250);
+  --color-primary-foreground: oklch(0.145 0.017 260);
+  --color-secondary: oklch(0.24 0.02 260);
+  --color-secondary-foreground: oklch(0.93 0.006 260);
+  --color-muted: oklch(0.24 0.02 260);
+  --color-muted-foreground: oklch(0.55 0.02 260);
+  --color-accent: oklch(0.24 0.02 260);
+  --color-accent-foreground: oklch(0.93 0.006 260);
+  --color-destructive: oklch(0.577 0.245 27.325);
+  --color-destructive-foreground: oklch(0.93 0.006 260);
+  --color-border: oklch(0.24 0.02 260);
+  --color-input: oklch(0.24 0.02 260);
+  --color-ring: oklch(0.58 0.22 250);
 
-  .light {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 6%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 6%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 6%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 20% 45%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 6%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 217 91% 60%;
-  }
+  --radius: 0.75rem;
+
+  --color-success: oklch(0.65 0.19 155);
+  --color-warning: oklch(0.75 0.15 85);
+  --color-info: oklch(0.65 0.18 230);
 }
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--color-border);
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
   }
 }
 
 @layer components {
   .glass {
-    @apply bg-card/80 backdrop-blur-xl border border-border/50 shadow-lg;
+    background: color-mix(in oklch, var(--color-card) 80%, transparent);
+    backdrop-filter: blur(24px);
+    border: 1px solid color-mix(in oklch, var(--color-border) 50%, transparent);
+    box-shadow: 0 8px 32px oklch(0 0 0 / 0.2);
   }
 
   .glass-strong {
-    @apply bg-card/90 backdrop-blur-2xl border border-border/60 shadow-xl;
+    background: color-mix(in oklch, var(--color-card) 90%, transparent);
+    backdrop-filter: blur(40px);
+    border: 1px solid color-mix(in oklch, var(--color-border) 60%, transparent);
+    box-shadow: 0 8px 32px oklch(0 0 0 / 0.3);
   }
 
   .glass-subtle {
-    @apply bg-card/60 backdrop-blur-sm border border-border/30;
+    background: color-mix(in oklch, var(--color-card) 60%, transparent);
+    backdrop-filter: blur(8px);
+    border: 1px solid color-mix(in oklch, var(--color-border) 30%, transparent);
   }
 
   .glow-primary {
-    box-shadow: 0 0 15px hsl(var(--primary) / 0.15);
+    box-shadow: 0 0 15px oklch(0.58 0.22 250 / 0.15);
   }
 
   .glow-success {
-    box-shadow: 0 0 15px rgb(34 197 94 / 0.15);
+    box-shadow: 0 0 15px oklch(0.65 0.19 155 / 0.15);
   }
 
   .glow-warning {
-    box-shadow: 0 0 15px rgb(234 179 8 / 0.15);
+    box-shadow: 0 0 15px oklch(0.75 0.15 85 / 0.15);
   }
 
   .glow-danger {
-    box-shadow: 0 0 15px rgb(239 68 68 / 0.15);
+    box-shadow: 0 0 15px oklch(0.577 0.245 27.325 / 0.15);
   }
 
   .kpi-card {
-    @apply glass rounded-xl p-6 transition-all duration-300 hover:glow-primary;
+    @apply glass rounded-xl p-6 transition-all duration-300;
+  }
+
+  .kpi-card:hover {
+    @apply glow-primary;
   }
 
   .stat-value {
@@ -108,11 +102,13 @@
   }
 
   .sidebar-item:hover {
-    @apply bg-accent text-accent-foreground;
+    background-color: var(--color-accent);
+    color: var(--color-accent-foreground);
   }
 
   .sidebar-item.active {
-    @apply bg-primary/10 text-primary;
+    background-color: oklch(0.58 0.22 250 / 0.1);
+    color: var(--color-primary);
   }
 }
 
@@ -127,15 +123,15 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.3);
+  background: oklch(0.55 0.02 260 / 0.3);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: oklch(0.55 0.02 260 / 0.5);
 }
 
-/* Animations */
+/* Skeleton animation */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
@@ -144,9 +140,9 @@
 .skeleton {
   background: linear-gradient(
     90deg,
-    hsl(var(--muted)) 25%,
-    hsl(var(--muted) / 0.5) 50%,
-    hsl(var(--muted)) 75%
+    var(--color-muted) 25%,
+    oklch(from var(--color-muted) l c h / 0.5) 50%,
+    var(--color-muted) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;

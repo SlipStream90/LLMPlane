@@ -63,7 +63,7 @@ All deployed containers must have:
 
 ### 4.4 Network Isolation
 
-- Deployed model containers join the `internal` network only
+- Deployed model containers join the `llcp-internal` network only
 - No host network mode
 - Port mapping: only the assigned port range (e.g., 8100-8199)
 
@@ -75,25 +75,56 @@ llmplane-ollama-{deployment_id_short}
 llmplane-vllm-{deployment_id_short}
 ```
 
-## 5. Docker Compose Configuration
+## 5. Docker Compose Configuration — IMPLEMENTED
+
+The Docker socket proxy is now implemented using `tecnativa/docker-socket-proxy`:
 
 ```yaml
-backend:
+docker-socket-proxy:
+  image: tecnativa/docker-socket-proxy:latest
+  restart: unless-stopped
+  environment:
+    CONTAINERS: 1   # Allow container management
+    EXEC: 0          # Block exec into containers
+    VOLUMES: 0       # Block volume management
+    NETWORKS: 0      # Block network management
+    INFO: 1          # Allow system info
   volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+  ports:
+    - "127.0.0.1:2375:2375"
+  networks:
+    - llcp-internal
 ```
 
-This grants full Docker API access. The mitigation is in the application layer (allow-listed images only).
+**Backend and workers** connect to Docker via the proxy:
+```yaml
+environment:
+  - DOCKER_HOST=http://docker-socket-proxy:2375
+```
 
-## 6. Future Hardening (Phase 2+)
+The direct socket mount (`docker_socket` volume) has been removed from both `backend` and `workers` services.
+
+## 6. Defense-in-Depth Summary
+
+| Layer | Status | Description |
+|---|---|---|
+| Docker socket proxy | IMPLEMENTED | `tecnativa/docker-socket-proxy` with `CONTAINERS=1, EXEC=0, VOLUMES=0` |
+| Image allow-list | IMPLEMENTED | Fixed `IMAGE_MAP` — no arbitrary images from request body |
+| Resource limits | IMPLEMENTED | Memory, CPU, GPU device requests on all deployed containers |
+| Network isolation | IMPLEMENTED | `llcp-internal` network — no host mode |
+| Container naming | IMPLEMENTED | `llmplane-` prefix for all managed containers |
+| Authorization plugin | DEFERRED | Phase 2+ — Docker `AuthorizationPlugin` for daemon-level enforcement |
+
+## 7. Future Hardening (Phase 2+)
 
 - Use Docker's `AuthorizationPlugin` to enforce image allow-list at the Docker daemon level
-- Consider `docker-socket-proxy` (technovessel/docker-socket-proxy) as an intermediary
 - Move to Kubernetes with PodSecurityPolicies for production deployments
 - Implement audit logging for all Docker API calls
+- Add network policy enforcement for inter-container communication
 
-## 7. Sign-off
+## 8. Sign-off
 
-This document reviews the security implications of Docker socket access for local model deployment control. The accept-list approach (fixed image templates only, no arbitrary image names from request body) is the minimum viable security boundary for alpha.
+This document reviews the security implications of Docker socket access for local model deployment control. The socket proxy approach (technativa/docker-socket-proxy with scoped permissions) combined with the application-layer allow-list provides the minimum viable security boundary for alpha.
 
 **Approved for implementation with the constraints documented above.**
