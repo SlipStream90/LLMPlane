@@ -89,7 +89,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://llmplane:test_password@localhost:5432/llmplane_test
           REDIS_URL: redis://localhost:6379/0
-          FERNET_SECRET_KEY: test-key-for-ci-only-32-chars-long!
+          FERNET_SECRET_KEY: Odsyx0ZGsiGQZhjJ8HHbk5x-4nwdjmkJiLs5_MCyU28=
           BOOTSTRAP_ADMIN_TOKEN: test-token
         run: pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
 
