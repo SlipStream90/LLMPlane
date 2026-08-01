@@ -1,0 +1,29 @@
+# Celery worker dependencies.
+# Versions verified against PyPI on 2026-08-01.
+#
+# Workers share the backend's models/repositories (ARCHITECTURE.md 3.2), so
+# backend/requirements.txt is installed first in the image; this file adds only
+# what the worker needs on top.
+
+-r ../backend/requirements.txt
+
+# Deployment orchestration — this is the process that holds the Docker socket,
+# not the API (see backend/app/services/deployment_service.py).
+docker==7.2.0
+
+# Host + GPU telemetry (ADR-003). nvidia-ml-py is imported as `pynvml` and
+# degrades to "no GPU detected" on CPU-only hosts rather than failing.
+psutil==7.2.2
+nvidia-ml-py==13.610.43
+
+# Evaluation scoring (methodology_brief.md 1.6: RAGAS for RAG metrics,
+# DeepEval as the CI-gate metric library). Both were marked [UNVERIFIED] in the
+# methodology brief; these are the current releases as of 2026-08-01.
+# They are imported lazily inside tasks so a worker that never scores does not
+# pay their (heavy) import cost, and so a missing optional dependency degrades
+# one metric rather than breaking the whole worker.
+ragas==0.4.3
+deepeval==4.1.5
+rouge-score==0.1.2
+
+opentelemetry-instrumentation-celery==0.65b0
