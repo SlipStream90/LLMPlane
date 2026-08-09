@@ -11,6 +11,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard" },
+  { label: "Command Center", href: "/infrastructure", icon: "Network" },
   { label: "Providers", href: "/providers", icon: "Server" },
   { label: "Deployments", href: "/deployments", icon: "Container" },
   { label: "Routing", href: "/routing", icon: "GitBranch" },
@@ -21,6 +22,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Evaluations", href: "/evaluations", icon: "CheckCircle" },
   { label: "Leaderboard", href: "/leaderboard", icon: "Medal" },
   { label: "Observability", href: "/observability", icon: "Eye" },
+  { label: "Logs", href: "/logs", icon: "ScrollText" },
   { label: "Cost Analytics", href: "/cost-analytics", icon: "DollarSign" },
 ];
 

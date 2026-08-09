@@ -91,6 +91,7 @@ class DeploymentService:
         model_ref: str,
         gpu_index: int | None,
         gpu_available: bool,
+        config: dict | None = None,
     ) -> Deployment:
         """Record a pending deployment and allocate its port.
 
@@ -139,6 +140,7 @@ class DeploymentService:
                 status=DeploymentStatus.PENDING,
                 gpu_index=gpu_index,
                 port=port,
+                config=config,
             )
         )
         await publish_event(

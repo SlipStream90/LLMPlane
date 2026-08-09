@@ -15,7 +15,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import api_router
@@ -23,6 +23,7 @@ from app.api.v1 import ws as ws_module
 from app.core.config import get_settings
 from app.core.db import dispose_engine, init_engine
 from app.core.errors import register_exception_handlers
+from app.core.logging import clear_request_context, configure_logging, set_request_context
 from app.core.redis import close_redis, init_redis
 from app.core.tracing import configure_tracing
 from app.services.request_ingest_service import consume_forever
@@ -33,10 +34,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    logging.basicConfig(
-        level=settings.log_level.upper(),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging(settings.log_level, settings.log_file)
 
     init_engine()
     init_redis()
@@ -103,6 +101,30 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def request_logging(request: Request, call_next):
+        """Tag every log line in the request scope and emit a structured
+        request-completed line (PRD §43)."""
+        import uuid
+
+        request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+        trace_id = request.headers.get("x-trace-id")
+        set_request_context(request_id=request_id, trace_id=trace_id)
+        try:
+            response = await call_next(request)
+        finally:
+            clear_request_context()
+        response.headers["X-Request-ID"] = request_id
+        logger.info(
+            "request completed",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+            },
+        )
+        return response
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)

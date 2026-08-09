@@ -1,0 +1,29 @@
+# Caddy reverse proxy for the cloud demo deployment.
+# Replace {$SITE_DOMAIN} at runtime via the SITE_DOMAIN env var in docker/.env
+# (Caddy auto-provisions a Let's Encrypt cert for the domain on first boot —
+# DNS must already point at this VM's IP).
+
+{$SITE_DOMAIN} {
+	# Backend REST API
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Backend WebSocket (dashboard live updates)
+	handle /ws* {
+		reverse_proxy backend:8000
+	}
+
+	# LiteLLM gateway — optional public exposure of the OpenAI-compatible
+	# endpoint. Remove this block if you don't want the gateway reachable
+	# from outside the VM; it's already protected by LITELLM_MASTER_KEY.
+	handle /gateway/* {
+		uri strip_prefix /gateway
+		reverse_proxy gateway:4000
+	}
+
+	# Everything else -> Next.js frontend
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

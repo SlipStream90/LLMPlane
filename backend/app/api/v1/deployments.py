@@ -74,6 +74,7 @@ async def create_deployment(
         model_ref=payload.model_ref,
         gpu_index=payload.gpu_index,
         gpu_available=await _gpu_available(session),
+        config=payload.config,
     )
     # Commit before enqueueing: a worker that picks the task up first must be
     # able to see the row.

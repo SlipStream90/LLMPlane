@@ -23,6 +23,11 @@ class DeploymentCreate(BaseModel):
     backend_type: DeploymentBackend
     model_ref: str = Field(min_length=1, max_length=300)
     gpu_index: int | None = Field(default=None, ge=0, le=15)
+    config: dict | None = Field(
+        default=None,
+        description="Operator-supplied launch/runtime configuration (context "
+        "length, quantization, batch size, health checks, …).",
+    )
 
     @field_validator("model_ref")
     @classmethod
@@ -48,6 +53,7 @@ class DeploymentOut(ORMModel):
     port: int | None = None
     error_message: str | None = None
     download_progress_pct: int | None = None
+    config: dict | None = None
     created_at: datetime
 
 

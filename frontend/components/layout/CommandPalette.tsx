@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import {
   LayoutDashboard,
+  Network,
   Server,
   Container,
   GitBranch,
@@ -15,6 +16,7 @@ import {
   CheckCircle,
   Medal,
   Eye,
+  ScrollText,
   DollarSign,
   ExternalLink,
 } from "lucide-react";
@@ -22,6 +24,7 @@ import { NAV_ITEMS, GATEWAY_URL } from "@/lib/constants";
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard,
+  Network,
   Server,
   Container,
   GitBranch,
@@ -32,6 +35,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   CheckCircle,
   Medal,
   Eye,
+  ScrollText,
   DollarSign,
 };
 

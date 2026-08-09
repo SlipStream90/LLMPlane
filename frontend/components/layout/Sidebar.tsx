@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   LayoutDashboard,
+  Network,
   Server,
   Container,
   GitBranch,
@@ -15,6 +16,7 @@ import {
   CheckCircle,
   Medal,
   Eye,
+  ScrollText,
   DollarSign,
   ChevronLeft,
   ChevronRight,
@@ -25,6 +27,7 @@ import { cn } from "@/lib/utils";
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard,
+  Network,
   Server,
   Container,
   GitBranch,
@@ -35,6 +38,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   CheckCircle,
   Medal,
   Eye,
+  ScrollText,
   DollarSign,
 };
 

@@ -71,6 +71,14 @@ class ProviderHealthService:
         provider.last_health_check_at = result.checked_at
         provider.last_latency_ms = result.latency_ms
         await self.session.flush()
+        logger.info(
+            "provider health check",
+            extra={
+                "provider": provider.display_name,
+                "provider_type": str(provider.provider_type),
+                "status": str(result.status),
+            },
+        )
         return result
 
     async def check_all(

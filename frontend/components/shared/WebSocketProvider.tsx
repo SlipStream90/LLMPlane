@@ -37,7 +37,14 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   function connect() {
     try {
-      const ws = new WebSocket(WS_BASE_URL);
+      // The backend's WS hub authenticates via `?token=` (browsers cannot set
+      // headers on a handshake), so forward the stored project API key.
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("llcp_api_key")
+          : null;
+      const url = token ? `${WS_BASE_URL}?token=${encodeURIComponent(token)}` : WS_BASE_URL;
+      const ws = new WebSocket(url);
 
       ws.onopen = () => {
         setIsConnected(true);

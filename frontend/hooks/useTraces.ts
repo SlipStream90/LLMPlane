@@ -3,41 +3,57 @@ import { apiFetch } from "@/lib/api";
 
 export interface Trace {
   id: string;
-  model: string;
+  trace_id: string | null;
+  model_id: string;
+  status: "success" | "error" | "timeout";
   latency_ms: number;
-  status: "success" | "error";
-  cost: number;
-  tokens_input: number;
-  tokens_output: number;
-  timestamp: string;
-  spans: Span[];
+  ttft_ms: number | null;
+  cost_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  error_message: string | null;
+  tags: string[];
+  requested_at: string;
 }
 
-export interface Span {
-  id: string;
-  name: string;
-  duration_ms: number;
-  status: "ok" | "error";
-  parent_id: string | null;
-  attributes: Record<string, unknown>;
+export interface TraceQuery {
+  model_id?: string;
+  status?: string;
+  since?: string;
+  limit?: number;
 }
 
-export function useTraces(params?: { model?: string; status?: string }) {
-  const searchParams = new URLSearchParams();
-  if (params?.model) searchParams.set("model", params.model);
-  if (params?.status) searchParams.set("status", params.status);
+async function fetchTraces(params?: TraceQuery): Promise<Trace[]> {
+  const sp = new URLSearchParams();
+  if (params?.model_id) sp.set("model_id", params.model_id);
+  if (params?.status) sp.set("status", params.status);
+  if (params?.since) sp.set("since", params.since);
+  if (params?.limit) sp.set("limit", String(params.limit));
+  const query = sp.toString();
+  const res = await apiFetch<{ data: Trace[] } | Trace[]>(
+    `/traces${query ? `?${query}` : ""}`
+  );
+  // The API returns a Page envelope; unwrap it, but tolerate a bare array too.
+  return Array.isArray(res) ? res : res.data;
+}
 
-  const query = searchParams.toString();
-
+export function useTraces(params?: TraceQuery) {
   return useQuery<Trace[]>({
     queryKey: ["traces", params],
-    queryFn: () => apiFetch(`/traces${query ? `?${query}` : ""}`),
+    queryFn: () => fetchTraces(params),
   });
 }
 
-export function useTrace(id: string) {
-  return useQuery<Trace>({
-    queryKey: ["traces", id],
+export interface TraceDetail {
+  request: Trace | null;
+  langfuse_available: boolean;
+  trace: Record<string, unknown> | null;
+  detail_error: string | null;
+}
+
+export function useTraceDetail(id: string) {
+  return useQuery<TraceDetail>({
+    queryKey: ["trace", "detail", id],
     queryFn: () => apiFetch(`/traces/${id}`),
     enabled: !!id,
   });

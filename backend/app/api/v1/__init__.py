@@ -20,6 +20,7 @@ from app.api.v1 import (
     evaluations,
     experiments,
     leaderboard,
+    logs,
     playground,
     projects,
     prompts,
@@ -49,6 +50,7 @@ for module in (
     leaderboard,
     dashboard,
     cost_analytics,
+    logs,
     traces,
 ):
     _authenticated.include_router(module.router)

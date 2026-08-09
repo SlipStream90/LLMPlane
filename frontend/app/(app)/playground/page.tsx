@@ -1,12 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { GlassCard } from "@/components/ui/cards";
 import { Play, Plus, ThumbsUp, ThumbsDown } from "lucide-react";
 
-export default function PlaygroundPage() {
+const DEFAULT_MODELS = ["gpt-4o", "claude-opus-5", "gemini-pro", "llama3.1-8b"];
+
+function PlaygroundInner() {
+  const searchParams = useSearchParams();
+  const replayModel = searchParams.get("model");
   const [prompt, setPrompt] = useState("");
-  const [selectedModels, setSelectedModels] = useState<string[]>([]);
+  const [selectedModels, setSelectedModels] = useState<string[]>(
+    replayModel ? [replayModel] : []
+  );
   const [results, setResults] = useState<any[]>([]);
 
   return (
@@ -30,7 +37,7 @@ export default function PlaygroundPage() {
           <div>
             <label className="text-sm font-medium mb-2 block">Models</label>
             <div className="flex flex-wrap gap-2">
-              {["gpt-4o", "claude-opus-5", "gemini-pro", "llama3.1-8b"].map((model) => (
+              {DEFAULT_MODELS.map((model) => (
                 <button
                   key={model}
                   onClick={() => setSelectedModels((prev) => prev.includes(model) ? prev.filter((m) => m !== model) : [...prev, model])}
@@ -74,5 +81,13 @@ export default function PlaygroundPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function PlaygroundPage() {
+  return (
+    <Suspense fallback={<div className="page-container">Loading playground…</div>}>
+      <PlaygroundInner />
+    </Suspense>
   );
 }

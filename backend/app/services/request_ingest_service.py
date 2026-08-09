@@ -117,7 +117,17 @@ class RequestIngestService:
             requested_at=_timestamp(fields.get("requested_at")),
         )
         try:
-            return await self.requests.add(request)
+            result = await self.requests.add(request)
+            logger.info(
+                "request ingested",
+                extra={
+                    "model": str(fields.get("model_id") or "unknown"),
+                    "provider": str(fields.get("provider_id") or ""),
+                    "trace_id": fields.get("trace_id"),
+                    "status": str(_status(fields.get("status"))),
+                },
+            )
+            return result
         except IntegrityError:
             # Two consumers raced on the same event; the unique index won.
             await self.session.rollback()

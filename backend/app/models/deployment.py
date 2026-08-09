@@ -10,6 +10,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Index,
+    JSON,
     String,
     Text,
     func,
@@ -57,6 +58,11 @@ class Deployment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     port: Mapped[int | None] = mapped_column(nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     download_progress_pct: Mapped[int | None] = mapped_column(nullable=True)
+    #: Operator-supplied launch/runtime configuration captured by the deployment
+    #: wizard (context length, quantization, batch size, health checks, …).
+    #: Persisted so the record reflects the intended configuration even before
+    #: the worker applies every flag.
+    config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     samples: Mapped[list[GpuSample]] = relationship(
         back_populates="deployment", cascade="all, delete-orphan"

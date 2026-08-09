@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     app_name: str = "LLM Control Plane"
     environment: Literal["dev", "test", "prod"] = "dev"
     log_level: str = "INFO"
+    # Optional path for structured JSON logs (PRD §43). When set, every log
+    # line is also appended here in JSON; the Log Explorer reads this file via
+    # GET /logs. Leave unset to log to stdout only.
+    log_file: str | None = None
     api_v1_prefix: str = "/api/v1"
 
     # Comma-separated list of allowed browser origins. Restricted to the

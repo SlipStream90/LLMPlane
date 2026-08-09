@@ -1,0 +1,55 @@
+# Cloud demo override — layer this on top of docker-compose.yml on the
+# public VM. Drops the local-model-deployment path (GPU workers, Celery
+# beat, docker-socket-proxy) since those are meant to be run by each
+# self-hoster on their own machine, not on the shared demo VM. Adds a Caddy
+# reverse proxy that terminates TLS and fronts the frontend + backend on one
+# domain.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.cloud.yml up -d --build
+#
+# Note: workers/scheduler/docker-socket-proxy are tagged with the
+# "local-only" profile below, so a plain `docker compose ... up` skips them
+# automatically — no need to comment them out by hand.
+services:
+  workers:
+    profiles: ["local-only"]
+
+  scheduler:
+    profiles: ["local-only"]
+
+  docker-socket-proxy:
+    profiles: ["local-only"]
+
+  # NEXT_PUBLIC_* values are baked into the JS bundle at build time (see
+  # frontend/Dockerfile), so they must come in as build args here, not as
+  # container env vars. Set PUBLIC_API_URL / PUBLIC_WS_URL / PUBLIC_GATEWAY_URL
+  # in docker/.env before building.
+  frontend:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-https://changeme.example.com/api/v1}
+        NEXT_PUBLIC_WS_URL: ${PUBLIC_WS_URL:-wss://changeme.example.com/ws}
+        NEXT_PUBLIC_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-https://changeme.example.com/gateway}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - llcp-public
+
+volumes:
+  caddy_data:
+  caddy_config:
