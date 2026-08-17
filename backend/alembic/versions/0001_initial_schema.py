@@ -32,34 +32,44 @@ UUID = postgresql.UUID(as_uuid=True)
 JSONB = postgresql.JSONB(astext_type=sa.Text())
 TS = sa.DateTime(timezone=True)
 
+# create_type=False: the types are created explicitly by _create_enum() below.
+# Without it, op.create_table() fires SQLAlchemy's before_create event on each
+# ENUM column and emits a second, non-idempotent CREATE TYPE.
 provider_type = postgresql.ENUM(
     "openai", "anthropic", "gemini", "groq", "mistral", "cohere", "openrouter",
     "azure_openai", "aws_bedrock", "ollama", "vllm",
-    name="provider_type",
+    name="provider_type", create_type=False,
 )
 health_status = postgresql.ENUM(
-    "healthy", "degraded", "down", "unknown", name="health_status"
+    "healthy", "degraded", "down", "unknown", name="health_status", create_type=False
 )
-deployment_backend = postgresql.ENUM("ollama", "vllm", name="deployment_backend")
+deployment_backend = postgresql.ENUM(
+    "ollama", "vllm", name="deployment_backend", create_type=False
+)
 deployment_status = postgresql.ENUM(
-    "pending", "downloading", "running", "stopped", "error", name="deployment_status"
+    "pending", "downloading", "running", "stopped", "error",
+    name="deployment_status", create_type=False,
 )
 routing_strategy = postgresql.ENUM(
     "cheapest", "fastest", "fallback", "round_robin", "weighted",
     "cost_threshold", "latency_threshold",
-    name="routing_strategy",
+    name="routing_strategy", create_type=False,
 )
-request_status = postgresql.ENUM("success", "error", "timeout", name="request_status")
-dataset_format = postgresql.ENUM("csv", "json", name="dataset_format")
+request_status = postgresql.ENUM(
+    "success", "error", "timeout", name="request_status", create_type=False
+)
+dataset_format = postgresql.ENUM(
+    "csv", "json", name="dataset_format", create_type=False
+)
 run_status = postgresql.ENUM(
-    "pending", "running", "complete", "failed", name="run_status"
+    "pending", "running", "complete", "failed", name="run_status", create_type=False
 )
 item_status = postgresql.ENUM(
-    "pending", "running", "complete", "failed", name="item_status"
+    "pending", "running", "complete", "failed", name="item_status", create_type=False
 )
 metric_source = postgresql.ENUM(
     "ragas", "deepeval", "promptfoo", "computed", "llm_judge", "human",
-    name="metric_source",
+    name="metric_source", create_type=False,
 )
 
 _ENUMS = (
