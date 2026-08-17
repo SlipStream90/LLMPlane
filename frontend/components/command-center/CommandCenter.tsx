@@ -1,25 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import dynamic from "next/dynamic";
-import { Activity, Box, Grid3x3, Zap, Cpu, AlertTriangle } from "lucide-react";
+import { Activity, Box, Zap, Cpu, AlertTriangle } from "lucide-react";
 import { useCommandCenter } from "@/hooks/useCommandCenter";
 import { useCommandCenterUI } from "./store";
 import { useLiveTraffic } from "./useLiveTraffic";
 import { NodeInspectorPanel } from "./NodeInspectorPanel";
 import { Scene2D } from "./Scene2D";
-import { STATE_COLORS, STATE_LABEL } from "./InfraNodeMesh";
+import { STATE_COLORS, STATE_LABEL } from "./node-state";
 import type { CameraMode, NodeState } from "./types";
 import { cn } from "@/lib/utils";
-
-const Scene3D = dynamic(() => import("./Scene3D").then((m) => m.Scene3D), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-full text-muted-foreground">
-      Loading 3D scene…
-    </div>
-  ),
-});
 
 const CAMERA_MODES: { mode: CameraMode; label: string }[] = [
   { mode: "overview", label: "Overview" },
@@ -34,7 +24,7 @@ const LEGEND: NodeState[] = ["healthy", "high-load", "warning", "critical", "off
 
 export function CommandCenter() {
   const { nodes, edges, providerNodeIds, summary, isLoading } = useCommandCenter();
-  const { viewMode, reduceMotion, cameraMode, setViewMode, setReduceMotion, setCameraMode } =
+  const { reduceMotion, cameraMode, setReduceMotion, setCameraMode } =
     useCommandCenterUI();
   const traffic = useLiveTraffic(providerNodeIds);
 
@@ -70,7 +60,7 @@ export function CommandCenter() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Infrastructure Command Center</h1>
           <p className="text-muted-foreground text-sm">
-            Live 3D map of your LLM stack — requests, models, providers and GPUs.
+            Live map of your LLM stack — requests, models, providers and GPUs.
           </p>
         </div>
 
@@ -93,22 +83,6 @@ export function CommandCenter() {
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/50 border border-border text-xs">
             <span className={cn("w-2 h-2 rounded-full", connected ? "bg-green-500 animate-pulse" : "bg-zinc-500")} />
             {simulated ? "Live (sim)" : "Live"}
-          </div>
-
-          {/* View toggle */}
-          <div className="flex rounded-lg border border-border overflow-hidden">
-            <button
-              onClick={() => setViewMode("3d")}
-              className={cn("px-3 py-1.5 text-sm flex items-center gap-1.5", viewMode === "3d" ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
-            >
-              <Grid3x3 className="w-4 h-4" /> 3D
-            </button>
-            <button
-              onClick={() => setViewMode("2d")}
-              className={cn("px-3 py-1.5 text-sm flex items-center gap-1.5", viewMode === "2d" ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
-            >
-              2D
-            </button>
           </div>
 
           <button
@@ -152,18 +126,6 @@ export function CommandCenter() {
           <div className="flex items-center justify-center h-full text-muted-foreground">
             Loading infrastructure state…
           </div>
-        ) : viewMode === "3d" ? (
-          <Scene3D
-            nodes={nodes}
-            edges={edges}
-            selectedId={selectedId}
-            hoveredId={hoveredId}
-            cameraMode={cameraMode}
-            reduceMotion={reduceMotion}
-            onSelect={(id) => setSelectedId(id)}
-            onHover={setHoveredId}
-            traffic={traffic}
-          />
         ) : (
           <Scene2D
             nodes={nodes}

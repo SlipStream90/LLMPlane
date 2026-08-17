@@ -1,5 +1,19 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-export const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
+//: Re-exported from `lib/api` so there is a single place that normalizes the
+//: `/api/v1` suffix. This module used to duplicate the raw env read, which
+//: meant a bare-origin `NEXT_PUBLIC_API_URL` 404'd here too.
+export { API_BASE_URL } from "./api";
+
+/**
+ * WebSocket origin. `NEXT_PUBLIC_WS_URL` is documented as a bare `wss://host`,
+ * so the `/ws` path is appended here rather than baked into the env var.
+ */
+function resolveWsUrl(): string {
+  const raw = (process.env.NEXT_PUBLIC_WS_URL ?? "").trim().replace(/\/+$/, "");
+  if (!raw) return "ws://localhost:8000/ws";
+  return raw.endsWith("/ws") ? raw : `${raw}/ws`;
+}
+
+export const WS_BASE_URL = resolveWsUrl();
 
 export interface NavItem {
   label: string;

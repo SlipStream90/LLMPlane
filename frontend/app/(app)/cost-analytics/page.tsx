@@ -1,17 +1,28 @@
 "use client";
 
-import { useDashboard } from "@/hooks/useDashboard";
-import { GlassCard, KpiCard, LoadingPage } from "@/components/ui/cards";
-import { DollarSign, TrendingDown, Calendar, Download } from "lucide-react";
-import { Chart } from "@/components/shared/Chart";
 import { useState } from "react";
+import { GlassCard, KpiCard, LoadingPage } from "@/components/ui/cards";
+import { DollarSign, TrendingDown, Calendar, TrendingUp } from "lucide-react";
+import { Chart } from "@/components/shared/Chart";
 import { TIME_RANGES, type TimeRange } from "@/lib/constants";
+import {
+  useCostBreakdown,
+  useCostForecast,
+  useCostOverTime,
+} from "@/hooks/useCostAnalytics";
 
 export default function CostAnalyticsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>("30d");
-  const { data: analytics, isLoading } = useDashboard(timeRange);
+  const breakdown = useCostBreakdown(timeRange, "model");
+  const overTime = useCostOverTime(timeRange);
+  const forecast = useCostForecast();
 
-  if (isLoading) return <LoadingPage />;
+  if (breakdown.isLoading && overTime.isLoading) return <LoadingPage />;
+
+  const items = breakdown.data?.items ?? [];
+  const points = overTime.data?.points ?? [];
+  const totalCost = breakdown.data?.total_cost_usd ?? 0;
+  const totalRequests = items.reduce((sum, i) => sum + i.request_count, 0);
 
   return (
     <div className="page-container">
@@ -25,50 +36,107 @@ export default function CostAnalyticsPage() {
             <button
               key={tr.value}
               onClick={() => setTimeRange(tr.value)}
-              className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${timeRange === tr.value ? "bg-primary/10 border-primary/30 text-primary" : "border-border/50 hover:bg-accent"}`}
+              className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                timeRange === tr.value
+                  ? "bg-primary/10 border-primary/30 text-primary"
+                  : "border-border/50 hover:bg-accent"
+              }`}
             >
               {tr.label}
             </button>
           ))}
-          <button className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/50 text-sm hover:bg-accent transition-colors">
-            <Download className="w-4 h-4" /> Export
-          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <KpiCard title="Total Spend" value={analytics?.kpis?.total_cost || 0} format="currency" icon={<DollarSign className="w-5 h-5" />} />
-        <KpiCard title="Total Requests" value={analytics?.kpis?.total_requests || 0} format="number" icon={<Calendar className="w-5 h-5" />} />
-        <KpiCard title="Avg Cost/Request" value={analytics?.kpis?.total_requests ? (analytics.kpis.total_cost / analytics.kpis.total_requests) : 0} format="currency" icon={<TrendingDown className="w-5 h-5" />} />
+      {breakdown.isError && (
+        <GlassCard title="Could not load cost data">
+          <p className="text-sm text-red-400">{(breakdown.error as Error).message}</p>
+        </GlassCard>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <KpiCard
+          title="Total Spend"
+          value={totalCost}
+          format="currency"
+          icon={<DollarSign className="w-5 h-5" />}
+        />
+        <KpiCard
+          title="Total Requests"
+          value={totalRequests}
+          format="number"
+          icon={<Calendar className="w-5 h-5" />}
+        />
+        <KpiCard
+          title="Avg Cost/Request"
+          value={totalRequests ? totalCost / totalRequests : 0}
+          format="currency"
+          icon={<TrendingDown className="w-5 h-5" />}
+        />
+        <KpiCard
+          title="Projected Month End"
+          value={forecast.data?.projected_month_end_usd ?? 0}
+          format="currency"
+          icon={<TrendingUp className="w-5 h-5" />}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <GlassCard title="Cost Over Time" className="lg:col-span-2">
-          <Chart
-            option={{
-              tooltip: { trigger: "axis" },
-              xAxis: { type: "category", data: (analytics?.cost_over_time || []).map((d: any) => d.timestamp) },
-              yAxis: { type: "value", axisLabel: { formatter: "${value}" } },
-              series: [{ type: "line", data: (analytics?.cost_over_time || []).map((d: any) => d.cost), smooth: true, areaStyle: { opacity: 0.2 }, color: "#3b82f6" }],
-              grid: { left: 60, right: 20, top: 10, bottom: 30 },
-            }}
-            height="300px"
-          />
+          {points.length === 0 ? (
+            <div className="flex items-center justify-center h-[300px] text-sm text-muted-foreground">
+              No spend recorded for this period.
+            </div>
+          ) : (
+            <Chart
+              option={{
+                tooltip: { trigger: "axis" },
+                xAxis: { type: "category", data: points.map((p) => p.bucket) },
+                yAxis: { type: "value", axisLabel: { formatter: "${value}" } },
+                series: [
+                  {
+                    type: "line",
+                    data: points.map((p) => p.cost_usd),
+                    smooth: true,
+                    areaStyle: { opacity: 0.2 },
+                    color: "#3b82f6",
+                  },
+                ],
+                grid: { left: 60, right: 20, top: 10, bottom: 30 },
+              }}
+              height="300px"
+            />
+          )}
         </GlassCard>
 
         <GlassCard title="Cost by Model">
-          <Chart
-            option={{
-              tooltip: { trigger: "item" },
-              series: [{
-                type: "pie",
-                radius: ["40%", "70%"],
-                data: (analytics?.model_usage || []).map((m: any) => ({ name: m.model, value: m.cost })),
-                label: { color: "#94a3b8" },
-              }],
-            }}
-            height="300px"
-          />
+          {items.length === 0 ? (
+            <div className="flex items-center justify-center h-[300px] text-sm text-muted-foreground">
+              No spend recorded for this period.
+            </div>
+          ) : (
+            <Chart
+              option={{
+                tooltip: {
+                  trigger: "item",
+                  formatter: "{b}<br/>${c} ({d}%)",
+                },
+                legend: { bottom: 0, type: "scroll" },
+                series: [
+                  {
+                    type: "pie",
+                    radius: ["45%", "72%"],
+                    center: ["50%", "45%"],
+                    avoidLabelOverlap: true,
+                    itemStyle: { borderColor: "#0b0f19", borderWidth: 2 },
+                    label: { show: false },
+                    data: items.map((i) => ({ name: i.key, value: i.cost_usd })),
+                  },
+                ],
+              }}
+              height="300px"
+            />
+          )}
         </GlassCard>
       </div>
     </div>
