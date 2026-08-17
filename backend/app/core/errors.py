@@ -85,6 +85,21 @@ class ValidationProblem(ProblemException):
         )
 
 
+class StorageProblem(ProblemException):
+    """Server-side storage is unusable (missing mount, wrong ownership).
+
+    503 rather than 500: the request was valid and retrying after an operator
+    fixes the volume will succeed, which a 500 would not communicate.
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail,
+            type_="https://llmplane.dev/problems/storage-unavailable",
+        )
+
+
 class UpstreamProblem(ProblemException):
     """A dependency we do not control (gateway, provider, Langfuse, Docker)
     failed. Distinguished from our own 500s so operators can tell whose fault
@@ -100,14 +115,20 @@ class UpstreamProblem(ProblemException):
         )
 
 
-def _problem_response(
+def problem_response(
     request: Request,
     status_code: int,
     title: str,
     detail: str,
     type_: str = "about:blank",
     extra: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
+    """Build an RFC 7807 response.
+
+    Public so middleware — which runs outside the exception-handler chain and
+    would otherwise hand-roll a different error shape — can emit the same body.
+    """
     body: dict[str, Any] = {
         "type": type_,
         "title": title,
@@ -117,7 +138,16 @@ def _problem_response(
     }
     if extra:
         body.update(extra)
-    return JSONResponse(body, status_code=status_code, media_type=PROBLEM_CONTENT_TYPE)
+    return JSONResponse(
+        body,
+        status_code=status_code,
+        media_type=PROBLEM_CONTENT_TYPE,
+        headers=headers,
+    )
+
+
+#: Back-compat alias for existing internal callers.
+_problem_response = problem_response
 
 
 def register_exception_handlers(app: FastAPI) -> None:

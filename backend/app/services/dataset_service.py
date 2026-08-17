@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.config import get_settings
-from app.core.errors import ValidationProblem
+from app.core.errors import StorageProblem, ValidationProblem
 from app.models.enums import DatasetFormat
 
 
@@ -85,17 +85,46 @@ def parse_dataset(raw: bytes, source_format: DatasetFormat) -> ParsedDataset:
     return ParsedDataset(rows=rows, columns=columns)
 
 
+def _ensure_writable_dir(directory: str) -> None:
+    """Create the upload directory, converting OS errors into a diagnosis.
+
+    The container runs as a non-root user, so a `BENCHMARK_UPLOAD_DIR` whose
+    parent is root-owned (the default `/data/...` without a prepared or mounted
+    volume) fails with PermissionError. Surfaced as an actionable message rather
+    than an opaque 500 — the fix is a volume mount or a chown, and the operator
+    cannot guess that from a traceback.
+    """
+    try:
+        os.makedirs(directory, exist_ok=True)
+    except OSError as exc:
+        raise StorageProblem(
+            f"Cannot create the benchmark upload directory '{directory}': {exc}. "
+            "Mount a writable volume there, or set BENCHMARK_UPLOAD_DIR to a "
+            "path the application user can write to."
+        ) from exc
+    if not os.access(directory, os.W_OK):
+        raise StorageProblem(
+            f"The benchmark upload directory '{directory}' is not writable by "
+            "this process. Check the volume mount's ownership."
+        )
+
+
 def storage_path_for(dataset_id: uuid.UUID, source_format: DatasetFormat) -> str:
     """Server-generated path. Never derived from user input."""
     directory = get_settings().benchmark_upload_dir
-    os.makedirs(directory, exist_ok=True)
+    _ensure_writable_dir(directory)
     return os.path.join(directory, f"{dataset_id}.{source_format.value}")
 
 
 def write_dataset(path: str, raw: bytes) -> None:
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "wb") as handle:
-        handle.write(raw)
+    _ensure_writable_dir(os.path.dirname(path) or ".")
+    try:
+        with open(path, "wb") as handle:
+            handle.write(raw)
+    except OSError as exc:
+        raise StorageProblem(
+            f"Failed to write the dataset to '{path}': {exc}."
+        ) from exc
 
 
 def read_dataset(path: str, source_format: DatasetFormat) -> ParsedDataset:

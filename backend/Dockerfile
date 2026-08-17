@@ -26,7 +26,16 @@ COPY entrypoint.sh ./
 # Non-root: the backend needs no privileged host access. (Deployment control
 # talks to the Docker Engine API from `workers`, not from here — see
 # ARCHITECTURE.md 4.5 and T012's security review scope.)
-RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app && chmod +x /app/entrypoint.sh
+#
+# BENCHMARK_UPLOAD_DIR defaults to /data/benchmark_uploads. It must exist and be
+# owned by appuser before the drop to USER appuser: / is root-owned 755, so
+# os.makedirs("/data/...") from uid 10001 raises PermissionError and every
+# dataset upload 500s. Mount a persistent volume at /data to survive redeploys —
+# without one this directory is ephemeral container storage.
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /data/benchmark_uploads \
+    && chown -R appuser:appuser /app /data \
+    && chmod +x /app/entrypoint.sh
 USER appuser
 
 EXPOSE 8000

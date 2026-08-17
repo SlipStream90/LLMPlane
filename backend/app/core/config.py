@@ -58,7 +58,12 @@ class Settings(BaseSettings):
     # ---- request ingest (ADR-004) ---------------------------------------
     requests_stream_key: str = "requests:completed"
     requests_consumer_group: str = "backend-ingest"
-    requests_consumer_name: str = "backend-1"
+    #: Leave unset so each process derives a unique name. A shared name across
+    #: uvicorn workers puts several processes on one consumer identity, so their
+    #: pending-entries lists collide and a crashed worker's messages can be
+    #: claimed as if already handled. Set explicitly only for a single-process
+    #: deployment where a stable name aids debugging.
+    requests_consumer_name: str = ""
     # Set false in tests / when running a bare API process.
     enable_stream_consumer: bool = True
 
@@ -76,6 +81,9 @@ class Settings(BaseSettings):
     gpu_sample_retention_hours: int = 72
 
     # ---- limits ----------------------------------------------------------
+    #: Per-API-key requests/minute, enforced per worker process (see
+    #: `rate_limit_middleware`). Set to 0 to disable.
+    rate_limit_rpm: int = 600
     playground_max_models: int = 8
     playground_per_model_timeout_s: float = 60.0
     default_page_limit: int = 50

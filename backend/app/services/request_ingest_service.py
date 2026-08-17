@@ -44,6 +44,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import socket
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -195,6 +197,19 @@ async def ensure_consumer_group() -> None:
             raise
 
 
+def _consumer_name(configured: str) -> str:
+    """Resolve this process's consumer identity within the group.
+
+    Redis tracks a pending-entries list per consumer name. Several uvicorn
+    workers sharing one name share one PEL, so one worker can XACK or XCLAIM
+    another's in-flight messages. Defaulting to host+PID keeps each process
+    distinct while still letting an operator pin a name explicitly.
+    """
+    if configured.strip():
+        return configured.strip()
+    return f"{socket.gethostname()}-{os.getpid()}"
+
+
 async def consume_forever(stop_event: asyncio.Event | None = None) -> None:
     """Background consumer loop, started from the app lifespan.
 
@@ -208,19 +223,21 @@ async def consume_forever(stop_event: asyncio.Event | None = None) -> None:
     factory = get_session_factory()
     backoff = 1.0
 
+    consumer_name = _consumer_name(settings.requests_consumer_name)
+
     await ensure_consumer_group()
     logger.info(
         "Request ingest consumer started (stream=%s group=%s consumer=%s).",
         settings.requests_stream_key,
         settings.requests_consumer_group,
-        settings.requests_consumer_name,
+        consumer_name,
     )
 
     while not (stop_event and stop_event.is_set()):
         try:
             batches = await redis.xreadgroup(
                 groupname=settings.requests_consumer_group,
-                consumername=settings.requests_consumer_name,
+                consumername=consumer_name,
                 streams={settings.requests_stream_key: ">"},
                 count=_BATCH,
                 block=_BLOCK_MS,

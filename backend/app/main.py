@@ -15,7 +15,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -23,7 +23,7 @@ from app.api.v1 import api_router
 from app.api.v1 import ws as ws_module
 from app.core.config import get_settings
 from app.core.db import dispose_engine, init_engine
-from app.core.errors import register_exception_handlers
+from app.core.errors import problem_response, register_exception_handlers
 from app.core.logging import clear_request_context, configure_logging, set_request_context
 from app.core.redis import close_redis, init_redis
 from app.core.tracing import configure_tracing
@@ -57,6 +57,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "Request ingest consumer is DISABLED (ENABLE_STREAM_CONSUMER=false). "
             "Gateway traffic will not appear in the dashboard while it is off."
         )
+
+    # In prod the CORS default is almost never right, and the failure mode is a
+    # browser-side block with a healthy-looking backend — nothing in the server
+    # log says why. Say it out loud at startup instead.
+    if settings.environment == "prod":
+        local_only = all(
+            o.startswith(("http://localhost", "http://127.0.0.1"))
+            for o in settings.cors_origin_list
+        )
+        if local_only:
+            logger.warning(
+                "CORS_ORIGINS is still %s in a prod environment. Browser requests "
+                "from the deployed frontend will be blocked — set CORS_ORIGINS to "
+                "the frontend's public origin.",
+                settings.cors_origin_list,
+            )
 
     logger.info(
         "%s startup complete (env=%s).", settings.app_name, settings.environment
@@ -142,47 +158,64 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # ── Rate limiting (per-API-key sliding window) ────────────────────────
-    # Uses an in-process counter backed by Redis TTL for simplicity at alpha
-    # scale. Replace with redis sliding-window or SlowAPI for production
-    # multi-instance deployments.
+    # ── Rate limiting (per-API-key fixed window) ──────────────────────────
+    # In-process, per-worker state: with N uvicorn workers the effective ceiling
+    # is N × RATE_LIMIT_RPM. Adequate at alpha scale; a Redis sliding window is
+    # the fix when the limit needs to be exact across processes.
+    import hashlib
     import time
 
     _rate_buckets: dict[str, tuple[float, int]] = {}
+    _last_sweep = 0.0
+    _RATE_WINDOW_S = 60.0
+    _RATE_LIMIT = settings.rate_limit_rpm
+    _EXEMPT_PATHS = frozenset(
+        {"/health", "/ready", "/docs", "/openapi.json", "/metrics"}
+    )
 
     @app.middleware("http")
     async def rate_limit_middleware(request: Request, call_next):
-        # Skip rate limiting for health/docs/metrics endpoints
-        if request.url.path in ("/health", "/ready", "/docs", "/openapi.json", "/metrics"):
+        nonlocal _last_sweep
+
+        if request.url.path in _EXEMPT_PATHS or _RATE_LIMIT <= 0:
             return await call_next(request)
 
         api_key = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
         if not api_key:
             return await call_next(request)
 
-        now = time.time()
-        bucket_key = f"rl:{api_key}"
-        window = 60  # 1 minute window
+        # Key the bucket by digest, not by the credential itself, so a heap dump
+        # or a debugger frame does not hand over live API keys.
+        bucket_key = hashlib.sha256(api_key.encode()).hexdigest()
+        now = time.monotonic()
 
-        if bucket_key in _rate_buckets:
-            window_start, count = _rate_buckets[bucket_key]
-            if now - window_start > window:
-                _rate_buckets[bucket_key] = (now, 1)
-            elif count >= 600:  # default 600 RPM
-                return JSONResponse(
-                    status_code=429,
-                    content={"detail": "Rate limit exceeded. Try again later."},
-                    headers={"Retry-After": str(int(window - (now - window_start)))},
-                )
-            else:
-                _rate_buckets[bucket_key] = (window_start, count + 1)
-        else:
-            _rate_buckets[bucket_key] = (now, 1)
+        window_start, count = _rate_buckets.get(bucket_key, (now, 0))
+        if now - window_start > _RATE_WINDOW_S:
+            window_start, count = now, 0
 
-        # Periodic cleanup of expired buckets (every ~100 requests)
-        if len(_rate_buckets) > 100:
-            expired = [k for k, (start, _) in _rate_buckets.items() if now - start > window]
-            for k in expired:
+        if count >= _RATE_LIMIT:
+            retry_after = max(1, int(_RATE_WINDOW_S - (now - window_start)))
+            return problem_response(
+                request,
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "Too Many Requests",
+                f"Rate limit of {_RATE_LIMIT} requests/minute exceeded.",
+                "https://llmplane.dev/problems/rate-limited",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        _rate_buckets[bucket_key] = (window_start, count + 1)
+
+        # Sweep on a timer, not on every request past an arbitrary size. The old
+        # `if len(...) > 100` ran an O(n) scan on *every* request once the
+        # process had seen 100 distinct keys.
+        if now - _last_sweep > _RATE_WINDOW_S:
+            _last_sweep = now
+            for k in [
+                k
+                for k, (start, _) in _rate_buckets.items()
+                if now - start > _RATE_WINDOW_S
+            ]:
                 del _rate_buckets[k]
 
         return await call_next(request)
@@ -244,7 +277,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/ready", tags=["meta"], summary="Readiness probe")
-    async def ready() -> dict[str, object]:
+    async def ready() -> JSONResponse:
         """Readiness reports each dependency separately.
 
         A single boolean would hide *which* dependency is down, which is the
@@ -273,10 +306,19 @@ def create_app() -> FastAPI:
         checks["tracing"] = (
             "enabled" if getattr(app.state, "tracing_enabled", False) else "disabled"
         )
-        checks["ready"] = all(
+        ready = all(
             v == "ok" for k, v in checks.items() if k in ("database", "redis")
         )
-        return checks
+        checks["ready"] = ready
+        # A readiness probe that answers 200 while a dependency is down is not a
+        # readiness probe — the orchestrator keeps routing traffic to a process
+        # that cannot serve it. The body still names which check failed.
+        return JSONResponse(
+            checks,
+            status_code=(
+                status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+        )
 
     return app
 
