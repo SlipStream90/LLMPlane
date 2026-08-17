@@ -21,19 +21,18 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
 
+COPY entrypoint.sh ./
+
 # Non-root: the backend needs no privileged host access. (Deployment control
 # talks to the Docker Engine API from `workers`, not from here — see
 # ARCHITECTURE.md 4.5 and T012's security review scope.)
-RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app && chmod +x /app/entrypoint.sh
 USER appuser
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://localhost:8000/health || exit 1
-
-COPY entrypoint.sh ./
-RUN chmod +x entrypoint.sh
 
 ENTRYPOINT ["./entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
