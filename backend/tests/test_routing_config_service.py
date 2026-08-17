@@ -1,51 +1,54 @@
-"""RoutingConfigService rendering (T010).
+"""RoutingConfigService model resolution and rendering (T010).
 
-The security-critical assertion here is that no plaintext credential ever
-reaches the rendered `config.yaml`: on-disk config references credentials as
-`os.environ/...` and the real values travel only over the HTTP push
+Since commit 40a457f replaced LiteLLM with OpenRouter there is no gateway
+config file and no credential injection: the service validates a policy's
+allowlist against the project catalog and renders a document that is only ever
+displayed or stored. The security-critical assertion carries over unchanged —
+no plaintext provider credential may reach the rendered document
 (ARCHITECTURE.md 3.3, Article XII).
 """
 
 from __future__ import annotations
 
+import json
 import uuid
+from decimal import Decimal
 
 import pytest
-import yaml
 
 from app.models.enums import ProviderType, RoutingStrategy
 from app.models.provider import Provider, ProviderModel
 from app.models.routing import RoutingPolicy
 from app.services.credential_service import CredentialService
 from app.services.routing_config_service import (
+    ConfigPushResult,
+    RoutingConfigError,
     RoutingConfigService,
-    _fallback_chain,
-    _litellm_model_name,
-    env_var_name,
 )
 
 SECRET = "sk-do-not-leak-me-9999"
 
 
-def _provider(provider_type: ProviderType = ProviderType.OPENAI, **kwargs) -> Provider:
-    provider = Provider(
+def _provider(
+    provider_type: ProviderType = ProviderType.OPENAI, **kwargs
+) -> Provider:
+    kwargs.setdefault("is_active", True)
+    return Provider(
         id=uuid.uuid4(),
         project_id=uuid.uuid4(),
         provider_type=provider_type,
         display_name=f"test-{provider_type.value}",
-        is_active=True,
         **kwargs,
     )
-    return provider
 
 
 def _model(provider: Provider, model_id: str, **kwargs) -> ProviderModel:
+    kwargs.setdefault("context_window", 128_000)
     model = ProviderModel(
         id=uuid.uuid4(),
         provider_id=provider.id,
         model_id=model_id,
         display_name=model_id,
-        context_window=128_000,
         capabilities=[],
         **kwargs,
     )
@@ -54,11 +57,14 @@ def _model(provider: Provider, model_id: str, **kwargs) -> ProviderModel:
 
 
 def _policy(
-    strategy: RoutingStrategy, config: dict, allowlist: list[str]
+    strategy: RoutingStrategy,
+    config: dict,
+    allowlist: list[str],
+    project_id: uuid.UUID | None = None,
 ) -> RoutingPolicy:
     return RoutingPolicy(
         id=uuid.uuid4(),
-        project_id=uuid.uuid4(),
+        project_id=project_id or uuid.uuid4(),
         name="test-policy",
         strategy=strategy,
         config=config,
@@ -72,127 +78,226 @@ def service() -> RoutingConfigService:
     return RoutingConfigService(session=None)  # type: ignore[arg-type]
 
 
-def test_rendered_config_never_contains_a_plaintext_key(
-    service, tmp_path, monkeypatch
-) -> None:
+@pytest.fixture
+def stub_catalog(monkeypatch):
+    """Replace the repository the service constructs internally.
+
+    `resolve_models` is the only DB-touching path; stubbing the repository
+    keeps these tests in the unit tier (see tests/conftest.py).
+    """
+
+    def install(models: list[ProviderModel]) -> None:
+        class _StubRepo:
+            def __init__(self, session) -> None:
+                self.session = session
+
+            async def list_for_project(
+                self, project_id: uuid.UUID
+            ) -> list[ProviderModel]:
+                return list(models)
+
+        monkeypatch.setattr(
+            "app.services.routing_config_service.ProviderModelRepository", _StubRepo
+        )
+
+    return install
+
+
+# -- rendering -------------------------------------------------------------
+
+
+def test_rendered_config_never_contains_a_plaintext_key(service) -> None:
+    """The rendered document is display/storage-only and may be persisted or
+    returned to a client, so it must never carry credential material."""
     credentials = CredentialService()
-    provider = _provider(credentials_encrypted=credentials.encrypt({"api_key": SECRET}))
+    provider = _provider(
+        credentials_encrypted=credentials.encrypt({"api_key": SECRET})
+    )
     models = [_model(provider, "gpt-4.1")]
     policy = _policy(RoutingStrategy.CHEAPEST, {}, ["gpt-4.1"])
 
     document = service.render(policy, models)
-    params = document["model_list"][0]["litellm_params"]
-    assert params["api_key"] == f"os.environ/{env_var_name(provider)}"
+    serialized = json.dumps(document, default=str)
 
-    monkeypatch.setattr(
-        service.settings, "litellm_config_path", str(tmp_path / "config.yaml")
+    assert SECRET not in serialized
+    assert "api_key" not in serialized
+    assert "credentials" not in serialized
+    # The document is still complete enough to identify the deployment.
+    assert document["model_list"][0]["model_name"] == "gpt-4.1"
+
+
+def test_render_describes_the_policy_and_its_models(service) -> None:
+    provider = _provider()
+    models = [_model(provider, "gpt-4.1"), _model(provider, "gpt-4o-mini")]
+    policy = _policy(
+        RoutingStrategy.WEIGHTED, {"weights": {"gpt-4.1": 3}}, ["gpt-4.1", "gpt-4o-mini"]
     )
-    path = service.write_config_file(document)
-    with open(path, encoding="utf-8") as f:
-        written = f.read()
 
-    assert SECRET not in written
-    assert "os.environ/" in written
-    # And it must still be valid YAML the gateway can load.
-    assert yaml.safe_load(written)["model_list"][0]["model_name"] == "gpt-4.1"
+    document = service.render(policy, models)
+
+    assert document["policy_id"] == str(policy.id)
+    assert document["policy_name"] == "test-policy"
+    assert document["strategy"] == "weighted"
+    assert document["config"] == {"weights": {"gpt-4.1": 3}}
+    assert [e["model_name"] for e in document["model_list"]] == [
+        "gpt-4.1",
+        "gpt-4o-mini",
+    ]
 
 
-def test_live_push_document_carries_the_real_credential(service) -> None:
-    """The HTTP push is the one path that may carry secrets — otherwise a
-    provider added at runtime could never work without restarting the gateway."""
-    credentials = CredentialService()
-    provider = _provider(credentials_encrypted=credentials.encrypt({"api_key": SECRET}))
+def test_render_carries_provider_type_and_model_info(service) -> None:
+    provider = _provider(ProviderType.OLLAMA, base_url="http://localhost:11500")
+    model = _model(provider, "llama3.1:8b", context_window=8192)
+
+    entry = service.render(
+        _policy(RoutingStrategy.ROUND_ROBIN, {}, ["llama3.1:8b"]), [model]
+    )["model_list"][0]
+
+    assert entry["provider"] == "ollama"
+    assert entry["model_info"] == {
+        "id": str(model.id),
+        "max_input_tokens": 8192,
+    }
+
+
+def test_render_of_an_empty_allowlist_yields_an_empty_model_list(service) -> None:
+    document = service.render(_policy(RoutingStrategy.CHEAPEST, {}, []), [])
+
+    assert document["model_list"] == []
+    assert document["strategy"] == "cheapest"
+
+
+def test_pricing_metadata_is_not_leaked_into_the_document(service) -> None:
+    """Pricing lives in the catalog; OpenRouter does the cost accounting, so
+    the rendered document deliberately carries no price fields."""
+    provider = _provider()
+    model = _model(
+        provider,
+        "gpt-4.1",
+        input_price_per_1m=Decimal("2.50"),
+        output_price_per_1m=Decimal("10.00"),
+    )
+
+    entry = service.render(
+        _policy(RoutingStrategy.CHEAPEST, {}, ["gpt-4.1"]), [model]
+    )["model_list"][0]
+
+    assert "input_cost_per_token" not in entry
+    assert "input_price_per_1m" not in entry["model_info"]
+
+
+# -- model resolution ------------------------------------------------------
+
+
+async def test_resolve_models_returns_catalog_rows_in_allowlist_order(
+    service, stub_catalog
+) -> None:
+    provider = _provider()
+    catalog = [
+        _model(provider, "gpt-4.1"),
+        _model(provider, "gpt-4o-mini"),
+        _model(provider, "unlisted"),
+    ]
+    stub_catalog(catalog)
+
+    resolved = await service.resolve_models(
+        uuid.uuid4(), ["gpt-4o-mini", "gpt-4.1"]
+    )
+
+    assert [m.model_id for m in resolved] == ["gpt-4o-mini", "gpt-4.1"]
+
+
+async def test_resolve_models_rejects_unregistered_models(
+    service, stub_catalog
+) -> None:
+    provider = _provider()
+    stub_catalog([_model(provider, "gpt-4.1")])
+
+    with pytest.raises(RoutingConfigError) as exc:
+        await service.resolve_models(uuid.uuid4(), ["gpt-4.1", "ghost", "phantom"])
+
+    message = str(exc.value)
+    assert "ghost" in message and "phantom" in message
+    assert "gpt-4.1" not in message
+
+
+async def test_resolve_models_rejects_models_on_inactive_providers(
+    service, stub_catalog
+) -> None:
+    inactive = _provider(is_active=False)
+    stub_catalog([_model(inactive, "gpt-4.1")])
+
+    with pytest.raises(RoutingConfigError, match="inactive providers"):
+        await service.resolve_models(uuid.uuid4(), ["gpt-4.1"])
+
+
+async def test_resolve_models_accepts_an_empty_allowlist(
+    service, stub_catalog
+) -> None:
+    stub_catalog([])
+
+    assert await service.resolve_models(uuid.uuid4(), []) == []
+
+
+# -- push / apply ----------------------------------------------------------
+
+
+async def test_push_reports_applied_without_a_gateway(service) -> None:
+    """OpenRouter needs no config push; the policy is simply saved."""
+    provider = _provider()
     models = [_model(provider, "gpt-4.1")]
     document = service.render(
         _policy(RoutingStrategy.CHEAPEST, {}, ["gpt-4.1"]), models
     )
 
-    live = service._with_live_credentials(document, models)
+    result = await service.push(document, models)
 
-    assert live["model_list"][0]["litellm_params"]["api_key"] == SECRET
-    # The original document must not be mutated by building the live copy.
-    assert document["model_list"][0]["litellm_params"]["api_key"].startswith(
-        "os.environ/"
-    )
+    assert isinstance(result, ConfigPushResult)
+    assert result.status == "applied"
+    assert result.applied is True
+    assert result.config_path is None
 
 
-def test_local_providers_get_an_api_base_and_no_key(service) -> None:
+def test_deferred_result_is_not_applied() -> None:
+    result = ConfigPushResult("deferred", detail="routing not yet active")
+
+    assert result.applied is False
+    assert result.detail == "routing not yet active"
+
+
+async def test_apply_policy_validates_then_saves(service, stub_catalog) -> None:
+    provider = _provider()
+    stub_catalog([_model(provider, "gpt-4.1")])
+    policy = _policy(RoutingStrategy.FALLBACK, {}, ["gpt-4.1"])
+
+    result = await service.apply_policy(policy)
+
+    assert result.applied is True
+
+
+async def test_apply_policy_refuses_an_unresolvable_allowlist(
+    service, stub_catalog
+) -> None:
+    stub_catalog([])
+    policy = _policy(RoutingStrategy.FALLBACK, {}, ["gpt-4.1"])
+
+    with pytest.raises(RoutingConfigError, match="gpt-4.1"):
+        await service.apply_policy(policy)
+
+
+async def test_apply_policy_never_logs_or_returns_credentials(
+    service, stub_catalog, caplog
+) -> None:
+    credentials = CredentialService()
     provider = _provider(
-        ProviderType.OLLAMA, base_url="http://host.docker.internal:11500"
+        credentials_encrypted=credentials.encrypt({"api_key": SECRET})
     )
-    models = [_model(provider, "llama3.1:8b")]
+    stub_catalog([_model(provider, "gpt-4.1")])
 
-    params = service.render(
-        _policy(RoutingStrategy.ROUND_ROBIN, {}, ["llama3.1:8b"]), models
-    )["model_list"][0]["litellm_params"]
-
-    assert params["api_base"] == "http://host.docker.internal:11500"
-    assert "api_key" not in params
-    assert params["model"] == "ollama/llama3.1:8b"
-
-
-def test_weights_are_applied_only_to_listed_models(service) -> None:
-    provider = _provider()
-    models = [_model(provider, "gpt-4.1"), _model(provider, "gpt-4o-mini")]
-    policy = _policy(
-        RoutingStrategy.WEIGHTED,
-        {"weights": {"gpt-4.1": 3}},
-        ["gpt-4.1", "gpt-4o-mini"],
-    )
-
-    entries = {
-        e["model_name"]: e["litellm_params"]
-        for e in service.render(policy, models)["model_list"]
-    }
-
-    assert entries["gpt-4.1"]["weight"] == 3
-    assert "weight" not in entries["gpt-4o-mini"]
-
-
-def test_pricing_is_converted_to_per_token(service) -> None:
-    from decimal import Decimal
-
-    provider = _provider()
-    models = [
-        _model(
-            provider,
-            "gpt-4.1",
-            input_price_per_1m=Decimal("2.50"),
-            output_price_per_1m=Decimal("10.00"),
+    with caplog.at_level("DEBUG"):
+        result = await service.apply_policy(
+            _policy(RoutingStrategy.CHEAPEST, {}, ["gpt-4.1"])
         )
-    ]
 
-    params = service.render(_policy(RoutingStrategy.CHEAPEST, {}, ["gpt-4.1"]), models)[
-        "model_list"
-    ][0]["litellm_params"]
-
-    assert params["input_cost_per_token"] == pytest.approx(2.5e-6)
-    assert params["output_cost_per_token"] == pytest.approx(1e-5)
-
-
-def test_fallback_chain_shape() -> None:
-    assert _fallback_chain(["a", "b", "c"]) == [{"a": ["b", "c"]}, {"b": ["c"]}]
-    assert _fallback_chain(["only"]) == []
-    assert _fallback_chain([]) == []
-
-
-def test_already_qualified_model_names_are_not_double_prefixed() -> None:
-    provider = _provider(ProviderType.OPENAI)
-    model = _model(provider, "openai/gpt-4.1")
-    assert _litellm_model_name(model, provider) == "openai/gpt-4.1"
-
-
-def test_cache_stays_off_unless_the_policy_opts_in(service) -> None:
-    """Alpha ships an exact-match cache only, opt-in per policy
-    (ARCHITECTURE.md 4.4). It must not be on by default."""
-    provider = _provider()
-    models = [_model(provider, "gpt-4.1")]
-
-    off = service.render(_policy(RoutingStrategy.CHEAPEST, {}, ["gpt-4.1"]), models)
-    on = service.render(
-        _policy(RoutingStrategy.CHEAPEST, {"enable_cache": True}, ["gpt-4.1"]), models
-    )
-
-    assert off["litellm_settings"]["cache"] is False
-    assert "cache_params" not in off["litellm_settings"]
-    assert on["litellm_settings"]["cache_params"]["type"] == "redis"
+    assert result.applied is True
+    assert SECRET not in caplog.text
