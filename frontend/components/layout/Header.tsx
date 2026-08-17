@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Bell, User, ExternalLink, LogOut, ChevronDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { API_BASE_URL } from "@/lib/constants";
+import { Search, LogOut, ChevronDown, Sun, Moon } from "lucide-react";
 import { useTheme } from "next-themes";
+import { API_BASE_URL } from "@/lib/constants";
+import { openCommandPalette } from "@/components/layout/command-palette-bus";
+import { cn } from "@/lib/utils";
 
 interface UserData {
   id: string;
@@ -16,109 +17,134 @@ interface UserData {
 }
 
 export function Header() {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const router = useRouter();
   const [user, setUser] = useState<UserData | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const stored = localStorage.getItem("llcp_user");
     if (stored) {
       try {
         setUser(JSON.parse(stored));
       } catch {
-        // ignore
+        // Corrupt entry — treat as signed out rather than crashing the shell.
       }
     }
   }, []);
 
-  const handleLogout = async () => {
+  async function handleLogout() {
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, { method: "POST", credentials: "include" });
     } catch {
-      // ignore
+      // Sign out locally regardless — a failed round-trip must not strand the
+      // user in a half-authenticated shell.
     }
     localStorage.removeItem("llcp_session_token");
     localStorage.removeItem("llcp_user");
     router.push("/");
-  };
+  }
 
   const displayName = user?.name || user?.email?.split("@")[0] || "User";
   const initials = displayName
     .split(" ")
-    .map((n: string) => n[0])
+    .map((n) => n[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
 
   return (
-    <header className="h-14 border-b border-border bg-card/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-40">
-      <div className="flex items-center gap-4 flex-1">
-        <div className="relative max-w-md w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search... (⌘K)"
-            className="w-full pl-9 pr-4 py-2 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            readOnly
-            onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))}
-          />
-        </div>
-      </div>
+    <header className="h-14 shrink-0 sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-xl flex items-center justify-between gap-4 px-5">
+      {/*
+       * A real button, not a readOnly input. The previous version synthesised a
+       * fake ⌘K KeyboardEvent on click and hoped the palette's global listener
+       * picked it up — which broke silently on any platform where the listener
+       * checked ctrlKey instead.
+       */}
+      <button
+        onClick={openCommandPalette}
+        className="group flex items-center gap-2.5 w-full max-w-sm px-3 py-1.5 rounded-md border border-border bg-surface-1 text-sm text-subtle-foreground hover:border-border-strong hover:text-muted-foreground transition-colors"
+      >
+        <Search className="w-3.5 h-3.5 shrink-0" />
+        <span className="flex-1 text-left">Search or jump to…</span>
+        <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border bg-surface-2 font-mono text-[0.6875rem] text-subtle-foreground">
+          ⌘K
+        </kbd>
+      </button>
 
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        >
-          {theme === "dark" ? "☀️" : "🌙"}
-        </Button>
+      <div className="flex items-center gap-1">
+        {/* Rendered only after mount: `resolvedTheme` is undefined on the server
+            and would otherwise flash the wrong icon. */}
+        {mounted && (
+          <button
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+            aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`}
+            title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`}
+            className="p-2 rounded-md text-muted-foreground hover:bg-surface-2 hover:text-foreground transition-colors"
+          >
+            {resolvedTheme === "dark" ? (
+              <Sun className="w-4 h-4" />
+            ) : (
+              <Moon className="w-4 h-4" />
+            )}
+          </button>
+        )}
 
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-4 w-4" />
-          <span className="absolute top-1 right-1 h-2 w-2 bg-destructive rounded-full" />
-        </Button>
+        {/* The notification bell that used to sit here was removed: it rendered
+            a permanent red unread dot with no data source behind it. */}
 
-        {/* User menu */}
         <div className="relative">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex items-center gap-2 px-2"
-            onClick={() => setShowMenu(!showMenu)}
+          <button
+            onClick={() => setShowMenu((s) => !s)}
+            aria-haspopup="menu"
+            aria-expanded={showMenu}
+            className={cn(
+              "flex items-center gap-2 pl-1 pr-2 py-1 rounded-md transition-colors",
+              showMenu ? "bg-surface-2" : "hover:bg-surface-2"
+            )}
           >
             {user?.avatar_url ? (
-              <img
-                src={user.avatar_url}
-                alt={displayName}
-                className="w-6 h-6 rounded-full"
-              />
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={user.avatar_url} alt="" className="w-6 h-6 rounded-full" />
             ) : (
-              <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
+              <span className="grid place-items-center w-6 h-6 rounded-full bg-primary-subtle text-[0.6875rem] font-semibold text-primary">
                 {initials}
-              </div>
+              </span>
             )}
-            <span className="text-sm font-medium hidden md:inline">{displayName}</span>
-            <ChevronDown className="h-3 w-3 text-muted-foreground" />
-          </Button>
+            <span className="text-sm font-medium hidden md:inline max-w-32 truncate">
+              {displayName}
+            </span>
+            <ChevronDown className="w-3 h-3 text-subtle-foreground" />
+          </button>
 
           {showMenu && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-full mt-1 w-56 rounded-xl border border-border bg-card shadow-lg z-50 overflow-hidden">
-                {user && (
-                  <div className="px-3 py-2 border-b border-border">
-                    <p className="text-sm font-medium">{user.name || user.email}</p>
-                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                    <p className="text-xs text-muted-foreground mt-1">via {user.provider}</p>
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-1.5 w-60 z-50 surface-raised shadow-elev-3 overflow-hidden"
+              >
+                {user ? (
+                  <div className="px-3.5 py-3 border-b border-border">
+                    <p className="text-sm font-medium truncate">{user.name || user.email}</p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{user.email}</p>
+                    <p className="text-[0.6875rem] text-subtle-foreground mt-1.5">
+                      signed in via {user.provider}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="px-3.5 py-3 border-b border-border">
+                    <p className="text-sm text-muted-foreground">Not signed in</p>
                   </div>
                 )}
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+                  role="menuitem"
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-muted-foreground hover:bg-surface-2 hover:text-foreground transition-colors"
                 >
-                  <LogOut className="h-4 w-4" />
+                  <LogOut className="w-4 h-4" />
                   Sign out
                 </button>
               </div>

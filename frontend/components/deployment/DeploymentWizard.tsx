@@ -206,11 +206,20 @@ export function DeploymentWizard() {
                 className="w-full px-3 py-2 rounded-lg bg-background/50 border border-border/50 text-sm disabled:opacity-50"
               />
             </Field>
-            <Field label="CPU Cores" hint="Allocated to the container">
+            {/* This was previously labelled "CPU Cores" and bound to a
+                `config.cpu_cores` key that exists neither on WizardConfig nor
+                on the deployment schema — so it always rendered "8", could not
+                be edited, and its onChange silently overwrote tensor
+                parallelism. It is the tensor-parallelism field, so it now says
+                so. */}
+            <Field label="Tensor Parallelism" hint="GPUs to shard the model across (vLLM)">
               <input
-                value={(config as any).cpu_cores ?? "8"}
+                type="number"
+                min={1}
+                value={config.tensor_parallelism}
                 onChange={(e) => set("tensor_parallelism", e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-background/50 border border-border/50 text-sm"
+                disabled={backendType !== "vllm"}
+                className="w-full px-3 py-2 rounded-lg bg-background/50 border border-border/50 text-sm disabled:opacity-50"
               />
             </Field>
           </div>

@@ -1,11 +1,22 @@
 "use client";
 
 import { useEvaluations } from "@/hooks/useEvaluations";
-import { GlassCard, LoadingPage } from "@/components/ui/cards";
-import { Trophy, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import {
+  Panel,
+  PageHeader,
+  LoadingPage,
+  EmptyState,
+  ErrorState,
+} from "@/components/ui/cards";
+import { Trophy } from "lucide-react";
+import { TONE_CLASSES, type Tone } from "@/lib/status";
+import { cn } from "@/lib/utils";
+
+/** Podium tints reuse the tone ramp instead of raw gold/silver/bronze literals. */
+const PODIUM: Tone[] = ["warning", "neutral", "danger"];
 
 export default function LeaderboardPage() {
-  const { data: evaluations, isLoading } = useEvaluations();
+  const { data: evaluations, isLoading, isError, error, refetch } = useEvaluations();
 
   if (isLoading) return <LoadingPage />;
 
@@ -27,50 +38,81 @@ export default function LeaderboardPage() {
 
   return (
     <div className="page-container">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Leaderboard</h1>
-          <p className="text-muted-foreground">Model rankings by quality score</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Leaderboard"
+        description="Model rankings by average evaluation score."
+      />
 
-      <GlassCard>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border/50">
-                <th className="text-left py-3 px-4 font-medium text-muted-foreground w-12">#</th>
-                <th className="text-left py-3 px-4 font-medium text-muted-foreground">Model</th>
-                <th className="text-right py-3 px-4 font-medium text-muted-foreground">Avg Score</th>
-                <th className="text-right py-3 px-4 font-medium text-muted-foreground">Evaluations</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranked.map((row, i) => (
-                <tr key={row.model} className="border-b border-border/30 hover:bg-accent/30 transition-colors">
-                  <td className="py-3 px-4">
-                    {i < 3 ? (
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? "bg-yellow-500/20 text-yellow-500" : i === 1 ? "bg-gray-400/20 text-gray-400" : "bg-orange-500/20 text-orange-500"}`}>
-                        {i + 1}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">{i + 1}</span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 font-medium">{row.model}</td>
-                  <td className="py-3 px-4 text-right">
-                    <span className="font-medium text-green-500">{row.avgScore.toFixed(2)}</span>
-                  </td>
-                  <td className="py-3 px-4 text-right text-muted-foreground">{row.count}</td>
+      {isError && (
+        <ErrorState title="Could not load evaluations" error={error} onRetry={refetch} />
+      )}
+
+      {!isError && ranked.length === 0 && (
+        <EmptyState
+          icon={<Trophy className="w-5 h-5" />}
+          title="No models ranked yet"
+          description="Once evaluations are recorded, models are ranked here by their mean score."
+        />
+      )}
+
+      {!isError && ranked.length > 0 && (
+        <Panel flush>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground w-12">
+                    #
+                  </th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">
+                    Model
+                  </th>
+                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">
+                    Avg Score
+                  </th>
+                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">
+                    Evaluations
+                  </th>
                 </tr>
-              ))}
-              {ranked.length === 0 && (
-                <tr><td colSpan={4} className="py-12 text-center text-muted-foreground">No models ranked yet.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </GlassCard>
+              </thead>
+              <tbody>
+                {ranked.map((row, i) => {
+                  const podium = i < 3 ? TONE_CLASSES[PODIUM[i]] : null;
+                  return (
+                    <tr
+                      key={row.model}
+                      className="border-b border-border last:border-0 hover:bg-surface-2 transition-colors"
+                    >
+                      <td className="py-3 px-4">
+                        {podium ? (
+                          <span
+                            className={cn(
+                              "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold tabular",
+                              podium.bg,
+                              podium.text
+                            )}
+                          >
+                            {i + 1}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground tabular">{i + 1}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 font-medium">{row.model}</td>
+                      <td className="py-3 px-4 text-right font-medium tabular">
+                        {row.avgScore.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-4 text-right text-muted-foreground tabular">
+                        {row.count}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
     </div>
   );
 }

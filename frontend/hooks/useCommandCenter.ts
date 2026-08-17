@@ -17,7 +17,7 @@ export function useCommandCenter() {
     refetchInterval: 15000,
   });
 
-  const { nodes, edges, providerNodeIds } = useMemo(
+  const { nodes, edges, providerNodeIds, isEmpty } = useMemo(
     () =>
       buildTopology({
         providers: providers.data as Provider[] | undefined,
@@ -31,7 +31,13 @@ export function useCommandCenter() {
     nodes,
     edges,
     providerNodeIds,
+    isEmpty,
     summary: summary.data ?? null,
-    isLoading: providers.isLoading && deployments.isLoading,
+    // `&&` meant the view rendered as "loaded but empty" while one of the two
+    // queries was still in flight — which, with the old demo fallback, briefly
+    // painted a fake fleet. Either query still loading means still loading.
+    isLoading: providers.isLoading || deployments.isLoading,
+    isError: providers.isError || deployments.isError,
+    error: providers.error ?? deployments.error,
   };
 }

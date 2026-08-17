@@ -12,12 +12,19 @@ import { WS_BASE_URL } from "@/lib/constants";
 
 interface WebSocketMessage {
   topic: string;
+  /** Backend publishers always set this — e.g. `deployment_status`,
+   *  `deployment_deleted`, `telemetry`, `policy_activated`. */
+  event?: string;
   data: unknown;
 }
 
+/** Subscribers receive the event name too; several topics multiplex more than
+ *  one event kind and previously there was no way to tell them apart. */
+type Subscriber = (data: unknown, event?: string) => void;
+
 interface WebSocketContextValue {
   isConnected: boolean;
-  subscribe: (topic: string, callback: (data: unknown) => void) => () => void;
+  subscribe: (topic: string, callback: Subscriber) => () => void;
   send: (topic: string, data: unknown) => void;
 }
 
@@ -32,7 +39,7 @@ export function useWebSocket() {
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const subscriptionsRef = useRef<Map<string, Set<(data: unknown) => void>>>(new Map());
+  const subscriptionsRef = useRef<Map<string, Set<Subscriber>>>(new Map());
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   function connect() {
@@ -58,7 +65,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         try {
           const msg: WebSocketMessage = JSON.parse(event.data);
           const callbacks = subscriptionsRef.current.get(msg.topic);
-          callbacks?.forEach((cb) => cb(msg.data));
+          callbacks?.forEach((cb) => cb(msg.data, msg.event));
         } catch {
           // Ignore malformed messages
         }
@@ -88,7 +95,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  function subscribe(topic: string, callback: (data: unknown) => void) {
+  function subscribe(topic: string, callback: Subscriber) {
     if (!subscriptionsRef.current.has(topic)) {
       subscriptionsRef.current.set(topic, new Set());
       // Send subscribe message if connected

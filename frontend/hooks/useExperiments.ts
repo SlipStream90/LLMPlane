@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, unwrapList, type Paginated } from "@/lib/api";
 
 export interface Experiment {
   id: string;
@@ -15,7 +15,9 @@ export interface Experiment {
 export function useExperiments() {
   return useQuery<Experiment[]>({
     queryKey: ["experiments"],
-    queryFn: () => apiFetch("/experiments"),
+    // `/experiments` is declared `Page[ExperimentOut]` on the backend.
+    queryFn: async () =>
+      unwrapList(await apiFetch<Paginated<Experiment> | Experiment[]>("/experiments")),
   });
 }
 

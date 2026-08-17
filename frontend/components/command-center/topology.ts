@@ -62,48 +62,41 @@ export interface BuildResult {
   nodes: InfraNode[];
   edges: InfraEdge[];
   providerNodeIds: string[];
+  /** No providers and no deployments — the backbone is all that is left to draw. */
+  isEmpty: boolean;
 }
-
-const DEMO_PROVIDERS: ProviderLike[] = [
-  { id: "demo-openai", provider_type: "openai", display_name: "OpenAI", health_status: "healthy", is_active: true, last_latency_ms: 320 },
-  { id: "demo-anthropic", provider_type: "anthropic", display_name: "Anthropic", health_status: "healthy", is_active: true, last_latency_ms: 410 },
-  { id: "demo-gemini", provider_type: "gemini", display_name: "Gemini", health_status: "warning", is_active: true, last_latency_ms: 1200 },
-  { id: "demo-groq", provider_type: "groq", display_name: "Groq", health_status: "healthy", is_active: true, last_latency_ms: 140 },
-];
-
-const DEMO_DEPLOYMENTS: DeploymentLike[] = [
-  { id: "demo-vllm", model_ref: "Qwen/Qwen2.5-72B-Instruct", backend_type: "vllm", status: "running", port: 11500, gpu_index: 0, config: { quantization: "fp8" } },
-  { id: "demo-ollama", model_ref: "llama3.1:8b", backend_type: "ollama", status: "running", port: 11501, gpu_index: 0, config: { quantization: "none" } },
-];
-
-const DEMO_SUMMARY: DashboardSummaryLike = {
-  requests_today: 48213,
-  cost_today_usd: 184.27,
-  avg_latency_ms: 412,
-  success_rate_pct: 99.2,
-  error_rate_pct: 0.8,
-  tokens_used_today: 92_400_000,
-  requests_per_minute: 38,
-  active_deployments: 2,
-  gpu_util_pct_avg: 78,
-};
 
 export function buildTopology({
   providers = [],
   deployments = [],
   summary,
 }: BuildInput): BuildResult {
-  // When nothing is wired up yet (no providers, no deployments) show a
-  // representative topology so the command center is never an empty void.
-  // Real data replaces these the moment the API responds.
-  let effProviders = providers;
-  let effDeployments = deployments;
-  let effSummary = summary;
-  if (effProviders.length === 0 && effDeployments.length === 0) {
-    effProviders = DEMO_PROVIDERS;
-    effDeployments = DEMO_DEPLOYMENTS;
-    effSummary = effSummary ?? DEMO_SUMMARY;
-  }
+  /*
+   * This function used to substitute a hardcoded DEMO_PROVIDERS /
+   * DEMO_DEPLOYMENTS / DEMO_SUMMARY payload whenever providers and deployments
+   * were both empty, so that the view was "never an empty void".
+   *
+   * That was removed, for three reasons:
+   *
+   *   1. The guard was `providers.length === 0 && deployments.length === 0`,
+   *      and both parameters default to `[]`. So it fired not only for a fresh
+   *      project but also while the queries were still in flight, and on any
+   *      error — including a 401. A broken connection rendered as a healthy
+   *      fleet.
+   *   2. `DEMO_SUMMARY` was applied with `??`, so a real (zeroed) summary got
+   *      grafted onto four fake providers — a mix of true and invented numbers
+   *      in the same header.
+   *   3. Nothing in the UI marked any of it as fake. An empty install showed
+   *      "$184.27 spent today, 48,213 requests, OpenAI/Anthropic/Gemini/Groq
+   *      healthy". A control plane that invents infrastructure is worse than
+   *      one that shows nothing.
+   *
+   * `isEmpty` is returned instead, and the caller renders an honest empty
+   * state that explains what to connect.
+   */
+  const effProviders = providers;
+  const effDeployments = deployments;
+  const effSummary = summary;
 
   const nodes: InfraNode[] = [];
   const edges: InfraEdge[] = [];
@@ -270,5 +263,10 @@ export function buildTopology({
     .filter((nd) => nd.kind === "provider" || nd.kind === "deployment")
     .map((nd) => nd.id);
 
-  return { nodes, edges, providerNodeIds };
+  return {
+    nodes,
+    edges,
+    providerNodeIds,
+    isEmpty: effProviders.length === 0 && effDeployments.length === 0,
+  };
 }

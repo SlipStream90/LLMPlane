@@ -142,4 +142,26 @@ export async function apiFetch<T>(
   return JSON.parse(text) as T;
 }
 
+/**
+ * The API is not consistent about list shapes: `/projects`, `/traces`,
+ * `/experiments` and `/evaluations` return a `Page[T]` envelope
+ * (`{data, next_cursor}`), while `/deployments`, `/providers`, `/benchmarks`,
+ * `/benchmark-datasets`, `/routing-policies` and `/logs` return a bare array.
+ *
+ * Hooks that assumed a bare array would call `.map` on the envelope object and
+ * throw — but only once the endpoint returned a non-empty result, which is why
+ * this survived testing against an empty project.
+ */
+export interface Paginated<T> {
+  data: T[];
+  next_cursor?: string | null;
+  total?: number;
+}
+
+export function unwrapList<T>(res: Paginated<T> | T[] | null | undefined): T[] {
+  if (Array.isArray(res)) return res;
+  if (res && Array.isArray(res.data)) return res.data;
+  return [];
+}
+
 export { getApiKey, API_BASE_URL };

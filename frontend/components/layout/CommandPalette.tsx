@@ -3,44 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
-import {
-  LayoutDashboard,
-  Network,
-  Server,
-  Container,
-  GitBranch,
-  Play,
-  FileText,
-  FlaskConical,
-  Trophy,
-  CheckCircle,
-  Medal,
-  Eye,
-  ScrollText,
-  DollarSign,
-  ExternalLink,
-} from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/constants";
+import { NAV_ICONS as ICON_MAP } from "@/lib/nav-icons";
+import { onOpenCommandPalette } from "@/components/layout/command-palette-bus";
 
 const GRAFANA_URL = process.env.NEXT_PUBLIC_GRAFANA_URL || "http://localhost:3001";
 const LANGFUSE_URL = process.env.NEXT_PUBLIC_LANGFUSE_URL || "https://cloud.langfuse.com";
-
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
-  LayoutDashboard,
-  Network,
-  Server,
-  Container,
-  GitBranch,
-  Play,
-  FileText,
-  FlaskConical,
-  Trophy,
-  CheckCircle,
-  Medal,
-  Eye,
-  ScrollText,
-  DollarSign,
-};
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -54,7 +23,13 @@ export function CommandPalette() {
       }
     }
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    // Also openable from the header's search button, without it having to
+    // synthesise a keyboard event.
+    const offBus = onOpenCommandPalette(() => setOpen(true));
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      offBus();
+    };
   }, []);
 
   if (!open) return null;
@@ -62,7 +37,7 @@ export function CommandPalette() {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setOpen(false)} />
-      <Command className="relative w-full max-w-lg glass-strong rounded-xl overflow-hidden shadow-2xl">
+      <Command className="relative w-full max-w-lg surface-raised rounded-lg overflow-hidden shadow-2xl">
         <Command.Input
           placeholder="Type a command or search..."
           className="w-full px-4 py-3 bg-transparent border-b border-border text-sm focus:outline-none"

@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import type { InfraNode } from "./types";
-import { STATE_COLORS, STATE_LABEL } from "./InfraNodeMesh";
+import { STATE_COLORS, STATE_LABEL } from "./node-state";
 
 interface Props {
   node: InfraNode | null;

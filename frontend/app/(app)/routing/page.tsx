@@ -6,8 +6,17 @@ import {
   useActivatePolicy,
   useDeletePolicy,
 } from "@/hooks/usePolicies";
-import { GlassCard, StatusBadge, LoadingPage } from "@/components/ui/cards";
+import {
+  Panel,
+  PageHeader,
+  StatusBadge,
+  LoadingPage,
+  EmptyState,
+  ErrorState,
+} from "@/components/ui/cards";
 import { Plus, Zap, Trash2 } from "lucide-react";
+import { TONE_CLASSES } from "@/lib/status";
+import { cn } from "@/lib/utils";
 
 /** `RoutingStrategy` values are snake_case; render them as words. */
 function strategyLabel(strategy: string): string {
@@ -15,7 +24,7 @@ function strategyLabel(strategy: string): string {
 }
 
 export default function RoutingPage() {
-  const { data: policies, isLoading, isError, error } = usePolicies();
+  const { data: policies, isLoading, isError, error, refetch } = usePolicies();
   const activatePolicy = useActivatePolicy();
   const deletePolicy = useDeletePolicy();
 
@@ -56,89 +65,97 @@ export default function RoutingPage() {
 
   return (
     <div className="page-container">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Routing Policies</h1>
-          <p className="text-muted-foreground">
-            Configure how requests are routed to models
-          </p>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-          <Plus className="w-4 h-4" /> New Policy
-        </button>
-      </div>
+      <PageHeader
+        title="Routing Policies"
+        description="Configure how requests are routed to models."
+        actions={
+          <button
+            disabled
+            title="Authoring policies from the UI is not implemented yet — create them via the API."
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 disabled:pointer-events-none"
+          >
+            <Plus className="w-4 h-4" /> New policy
+          </button>
+        }
+      />
 
       {isError && (
-        <GlassCard title="Could not load policies">
-          <p className="text-sm text-red-400">{(error as Error).message}</p>
-        </GlassCard>
+        <ErrorState title="Could not load policies" error={error} onRetry={refetch} />
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {list.map((policy) => (
-          <GlassCard key={policy.id} className="relative">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    policy.is_active ? "bg-green-500/10" : "bg-accent"
-                  }`}
-                >
-                  <Zap
-                    className={`w-5 h-5 ${
-                      policy.is_active ? "text-green-500" : "text-muted-foreground"
-                    }`}
-                  />
+      {!isError && list.length === 0 && (
+        <EmptyState
+          icon={<Zap className="w-5 h-5" />}
+          title="No routing policies configured"
+          description="A policy decides which model serves each request — by cost, latency, or an explicit allowlist."
+        />
+      )}
+
+      {!isError && list.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {list.map((policy) => (
+            <Panel key={policy.id} className="surface-interactive">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={cn(
+                      "w-10 h-10 rounded-md flex items-center justify-center shrink-0",
+                      policy.is_active ? TONE_CLASSES.success.bg : "bg-surface-2"
+                    )}
+                  >
+                    <Zap
+                      className={cn(
+                        "w-5 h-5",
+                        policy.is_active
+                          ? TONE_CLASSES.success.text
+                          : "text-muted-foreground"
+                      )}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="section-header truncate">{policy.name}</h3>
+                    <p className="text-sm text-muted-foreground capitalize truncate">
+                      {strategyLabel(policy.strategy)}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold">{policy.name}</h3>
-                  <p className="text-sm text-muted-foreground capitalize">
-                    {strategyLabel(policy.strategy)}
-                  </p>
-                </div>
+                {policy.is_active ? (
+                  <StatusBadge status="active" />
+                ) : (
+                  <button
+                    onClick={() => handleActivate(policy.id)}
+                    disabled={activatePolicy.isPending}
+                    className="px-3 py-1 rounded-md border border-border text-xs font-medium hover:bg-surface-2 transition-colors disabled:opacity-50 disabled:pointer-events-none shrink-0"
+                  >
+                    Activate
+                  </button>
+                )}
               </div>
-              {policy.is_active ? (
-                <StatusBadge status="active" />
-              ) : (
-                <button
-                  onClick={() => handleActivate(policy.id)}
-                  disabled={activatePolicy.isPending}
-                  className="px-3 py-1 rounded-lg border border-border/50 text-xs hover:bg-accent transition-colors disabled:opacity-50"
-                >
-                  Activate
-                </button>
-              )}
-            </div>
-            <div className="mt-4 space-y-2">
-              <div className="text-sm">
+
+              <div className="mt-4 text-sm">
                 <span className="text-muted-foreground">Models: </span>
-                <span className="font-medium">
+                <span className="font-medium tabular">
                   {policy.model_allowlist.length === 0
                     ? "all allowed"
                     : `${policy.model_allowlist.length} allowed`}
                 </span>
               </div>
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={() => handleDelete(policy.id)}
-                disabled={deletePolicy.isPending}
-                className="px-3 py-2 rounded-lg border border-border/50 text-sm hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
-          </GlassCard>
-        ))}
-        {!isError && list.length === 0 && (
-          <GlassCard className="col-span-full text-center py-12">
-            <p className="text-muted-foreground">No routing policies configured.</p>
-            <button className="mt-4 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-              Create Your First Policy
-            </button>
-          </GlassCard>
-        )}
-      </div>
+
+              <div className="mt-4 pt-4 border-t border-border flex justify-end">
+                <button
+                  onClick={() => handleDelete(policy.id)}
+                  disabled={deletePolicy.isPending}
+                  title="Delete policy"
+                  aria-label="Delete policy"
+                  className="p-2 rounded-md border border-border text-muted-foreground hover:text-danger hover:border-danger/30 hover:bg-danger-subtle transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </Panel>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

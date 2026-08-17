@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { InfraEdge, InfraNode, NodeState } from "./types";
-import { STATE_COLORS } from "./InfraNodeMesh";
+import { STATE_COLORS } from "./node-state";
 import type { LiveTrafficRefs } from "./useLiveTraffic";
 
 interface Props {

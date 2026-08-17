@@ -1,9 +1,17 @@
 "use client";
 
 import { useDashboard, useDashboardTimeseries } from "@/hooks/useDashboard";
-import { KpiCard, GlassCard, LoadingPage } from "@/components/ui/cards";
+import {
+  KpiCard,
+  Panel,
+  PageHeader,
+  LoadingPage,
+  ErrorState,
+} from "@/components/ui/cards";
 import { Activity, DollarSign, Clock, CheckCircle, Zap, Server, Cpu } from "lucide-react";
 import { Chart } from "@/components/shared/Chart";
+import { TONE_HEX } from "@/lib/status";
+import { cn } from "@/lib/utils";
 
 /** Renders an inline placeholder instead of an axis-less empty ECharts canvas. */
 function ChartOrEmpty({
@@ -29,7 +37,7 @@ function ChartOrEmpty({
 }
 
 export default function DashboardPage() {
-  const { data: summary, isLoading, isError, error } = useDashboard();
+  const { data: summary, isLoading, isError, error, refetch } = useDashboard();
   const series = useDashboardTimeseries("24h");
 
   if (isLoading) return <LoadingPage />;
@@ -37,14 +45,15 @@ export default function DashboardPage() {
   if (isError) {
     return (
       <div className="page-container">
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <GlassCard title="Could not load dashboard">
-          <p className="text-sm text-red-400">{(error as Error).message}</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Check that <code>NEXT_PUBLIC_API_URL</code> points at your backend and that
-            your API key is set.
-          </p>
-        </GlassCard>
+        <PageHeader
+          title="Dashboard"
+          description="Real-time overview of your LLM infrastructure."
+        />
+        <ErrorState title="Could not load dashboard" error={error} onRetry={refetch} />
+        <p className="text-sm text-muted-foreground">
+          Check that <code className="font-mono">NEXT_PUBLIC_API_URL</code> points at your
+          backend and that your API key is set.
+        </p>
       </div>
     );
   }
@@ -54,16 +63,16 @@ export default function DashboardPage() {
 
   return (
     <div className="page-container">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">Real-time overview of your LLM infrastructure</p>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          Live
-        </div>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        description="Real-time overview of your LLM infrastructure."
+        actions={
+          <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="relative w-1.5 h-1.5 rounded-full bg-success pulse-ring" />
+            Live
+          </span>
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
@@ -93,7 +102,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <GlassCard title="Request Volume" description="Requests over the last 24h">
+        <Panel title="Request Volume" description="Requests over the last 24h">
           <ChartOrEmpty empty={points.length === 0}>
             <Chart
               option={{
@@ -113,9 +122,9 @@ export default function DashboardPage() {
               height="300px"
             />
           </ChartOrEmpty>
-        </GlassCard>
+        </Panel>
 
-        <GlassCard title="Cost Over Time" description="Spending trend">
+        <Panel title="Cost Over Time" description="Spending trend">
           <ChartOrEmpty empty={points.length === 0}>
             <Chart
               option={{
@@ -128,7 +137,7 @@ export default function DashboardPage() {
                     data: points.map((p) => p.cost_usd),
                     smooth: true,
                     areaStyle: { opacity: 0.2 },
-                    color: "#10b981",
+                    color: TONE_HEX.success,
                   },
                 ],
                 grid: { left: 60, right: 20, top: 10, bottom: 30 },
@@ -136,11 +145,11 @@ export default function DashboardPage() {
               height="300px"
             />
           </ChartOrEmpty>
-        </GlassCard>
+        </Panel>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <GlassCard title="Model Usage" description="Top models by request count">
+        <Panel title="Model Usage" description="Top models by request count">
           <ChartOrEmpty empty={modelUsage.length === 0}>
             <Chart
               option={{
@@ -155,7 +164,7 @@ export default function DashboardPage() {
                     radius: ["45%", "72%"],
                     center: ["50%", "45%"],
                     avoidLabelOverlap: true,
-                    itemStyle: { borderColor: "#0b0f19", borderWidth: 2 },
+                    itemStyle: { borderWidth: 0 },
                     label: { show: false },
                     data: modelUsage.map((m) => ({
                       name: m.model_id,
@@ -167,9 +176,9 @@ export default function DashboardPage() {
               height="300px"
             />
           </ChartOrEmpty>
-        </GlassCard>
+        </Panel>
 
-        <GlassCard title="Errors Over Time" description="Failed requests per bucket">
+        <Panel title="Errors Over Time" description="Failed requests per bucket">
           <ChartOrEmpty empty={points.length === 0}>
             <Chart
               option={{
@@ -180,7 +189,7 @@ export default function DashboardPage() {
                   {
                     type: "bar",
                     data: points.map((p) => p.error_count),
-                    color: "#ef4444",
+                    color: TONE_HEX.danger,
                   },
                 ],
                 grid: { left: 50, right: 20, top: 10, bottom: 30 },
@@ -188,62 +197,60 @@ export default function DashboardPage() {
               height="300px"
             />
           </ChartOrEmpty>
-        </GlassCard>
+        </Panel>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <GlassCard>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-500/10">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Success Rate</p>
-              <p className="text-xl font-bold">
-                {summary ? `${summary.success_rate_pct.toFixed(1)}%` : "—"}
-              </p>
-            </div>
-          </div>
-        </GlassCard>
-        <GlassCard>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-500/10">
-              <Zap className="w-5 h-5 text-blue-500" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Req / min</p>
-              <p className="text-xl font-bold">
-                {summary ? summary.requests_per_minute.toFixed(1) : "—"}
-              </p>
-            </div>
-          </div>
-        </GlassCard>
-        <GlassCard>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-500/10">
-              <Server className="w-5 h-5 text-purple-500" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Active Deployments</p>
-              <p className="text-xl font-bold">{summary?.active_deployments ?? "—"}</p>
-            </div>
-          </div>
-        </GlassCard>
-        <GlassCard>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-yellow-500/10">
-              <Cpu className="w-5 h-5 text-yellow-500" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">GPU Util</p>
-              <p className="text-xl font-bold">
-                {summary?.gpu_util_pct_avg != null
-                  ? `${Math.round(summary.gpu_util_pct_avg)}%`
-                  : "—"}
-              </p>
-            </div>
-          </div>
-        </GlassCard>
+        <MiniStat
+          label="Success Rate"
+          value={summary ? `${summary.success_rate_pct.toFixed(1)}%` : "—"}
+          icon={<CheckCircle className="w-5 h-5" />}
+          tint="bg-success-subtle text-success"
+        />
+        <MiniStat
+          label="Req / min"
+          value={summary ? summary.requests_per_minute.toFixed(1) : "—"}
+          icon={<Zap className="w-5 h-5" />}
+          tint="bg-info-subtle text-info"
+        />
+        <MiniStat
+          label="Active Deployments"
+          value={summary?.active_deployments ?? "—"}
+          icon={<Server className="w-5 h-5" />}
+          tint="bg-primary-subtle text-primary"
+        />
+        <MiniStat
+          label="GPU Util"
+          value={
+            summary?.gpu_util_pct_avg != null
+              ? `${Math.round(summary.gpu_util_pct_avg)}%`
+              : "—"
+          }
+          icon={<Cpu className="w-5 h-5" />}
+          tint="bg-warning-subtle text-warning"
+        />
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  icon,
+  tint,
+}: {
+  label: string;
+  value: React.ReactNode;
+  icon: React.ReactNode;
+  tint: string;
+}) {
+  return (
+    <div className="surface surface-interactive p-5 flex items-center gap-3">
+      <span className={cn("p-2 rounded-md shrink-0", tint)}>{icon}</span>
+      <div className="min-w-0">
+        <p className="stat-label truncate">{label}</p>
+        <p className="text-xl font-semibold tabular mt-0.5">{value}</p>
       </div>
     </div>
   );

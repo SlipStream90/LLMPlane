@@ -14,7 +14,7 @@ export function LoadingSkeleton({ variant = "card", count = 1, className }: Load
         switch (variant) {
           case "card":
             return (
-              <div key={i} className="glass rounded-xl p-6 space-y-4">
+              <div key={i} className="surface p-5 space-y-4">
                 <Skeleton className="h-4 w-1/3" />
                 <Skeleton className="h-8 w-1/2" />
                 <Skeleton className="h-3 w-2/3" />
@@ -31,7 +31,7 @@ export function LoadingSkeleton({ variant = "card", count = 1, className }: Load
             );
           case "chart":
             return (
-              <div key={i} className="glass rounded-xl p-6">
+              <div key={i} className="surface p-5">
                 <Skeleton className="h-4 w-1/4 mb-4" />
                 <Skeleton className="h-64 w-full rounded-lg" />
               </div>

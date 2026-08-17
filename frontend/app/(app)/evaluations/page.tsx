@@ -1,11 +1,26 @@
 "use client";
 
 import { useEvaluations } from "@/hooks/useEvaluations";
-import { GlassCard, LoadingPage } from "@/components/ui/cards";
-import { Search, Filter, Download } from "lucide-react";
+import {
+  Panel,
+  PageHeader,
+  LoadingPage,
+  EmptyState,
+  ErrorState,
+} from "@/components/ui/cards";
+import { ClipboardCheck } from "lucide-react";
+import { TONE_CLASSES } from "@/lib/status";
+import { cn } from "@/lib/utils";
+
+/** Score bands mirror the tone vocabulary rather than raw palette classes. */
+function scoreTone(score: number) {
+  if (score >= 0.9) return TONE_CLASSES.success;
+  if (score >= 0.8) return TONE_CLASSES.warning;
+  return TONE_CLASSES.danger;
+}
 
 export default function EvaluationsPage() {
-  const { data: evaluations, isLoading } = useEvaluations();
+  const { data: evaluations, isLoading, isError, error, refetch } = useEvaluations();
 
   if (isLoading) return <LoadingPage />;
 
@@ -13,61 +28,84 @@ export default function EvaluationsPage() {
 
   return (
     <div className="page-container">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Evaluations</h1>
-          <p className="text-muted-foreground">View evaluation scores across runs</p>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border/50 text-sm hover:bg-accent transition-colors">
-          <Download className="w-4 h-4" /> Export
-        </button>
-      </div>
+      <PageHeader
+        title="Evaluations"
+        description="Evaluation scores across benchmark and experiment runs."
+      />
 
-      <div className="flex items-center gap-4 mb-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input type="text" placeholder="Filter by metric, model, or dataset..." className="pl-9 pr-4 py-2 rounded-lg bg-background/50 border border-border/50 text-sm w-full" />
-        </div>
-        <button className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/50 text-sm hover:bg-accent transition-colors">
-          <Filter className="w-4 h-4" /> Filters
-        </button>
-      </div>
+      {isError && (
+        <ErrorState title="Could not load evaluations" error={error} onRetry={refetch} />
+      )}
 
-      <GlassCard>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border/50">
-                <th className="text-left py-3 px-4 font-medium text-muted-foreground">Model</th>
-                <th className="text-left py-3 px-4 font-medium text-muted-foreground">Prompt</th>
-                <th className="text-right py-3 px-4 font-medium text-muted-foreground">Score</th>
-                <th className="text-right py-3 px-4 font-medium text-muted-foreground">Metrics</th>
-                <th className="text-right py-3 px-4 font-medium text-muted-foreground">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((row) => (
-                <tr key={row.id} className="border-b border-border/30 hover:bg-accent/30 transition-colors">
-                  <td className="py-3 px-4 font-medium">{row.model}</td>
-                  <td className="py-3 px-4 text-muted-foreground">{row.prompt_name}</td>
-                  <td className="py-3 px-4 text-right">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs ${row.score >= 0.9 ? "bg-green-500/10 text-green-500" : row.score >= 0.8 ? "bg-yellow-500/10 text-yellow-500" : "bg-red-500/10 text-red-500"}`}>
-                      {row.score.toFixed(2)}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right text-xs text-muted-foreground">
-                    {Object.entries(row.metrics).map(([k, v]) => `${k}: ${(v as number).toFixed(2)}`).join(", ")}
-                  </td>
-                  <td className="py-3 px-4 text-right text-muted-foreground">{new Date(row.created_at).toLocaleDateString()}</td>
+      {!isError && list.length === 0 && (
+        <EmptyState
+          icon={<ClipboardCheck className="w-5 h-5" />}
+          title="No evaluations yet"
+          description="Scores appear here once a benchmark run finishes scoring its items."
+        />
+      )}
+
+      {!isError && list.length > 0 && (
+        <Panel flush>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">
+                    Model
+                  </th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">
+                    Prompt
+                  </th>
+                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">
+                    Score
+                  </th>
+                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">
+                    Metrics
+                  </th>
+                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">
+                    Date
+                  </th>
                 </tr>
-              ))}
-              {list.length === 0 && (
-                <tr><td colSpan={5} className="py-12 text-center text-muted-foreground">No evaluations yet.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </GlassCard>
+              </thead>
+              <tbody>
+                {list.map((row) => {
+                  const tone = scoreTone(row.score);
+                  return (
+                    <tr
+                      key={row.id}
+                      className="border-b border-border last:border-0 hover:bg-surface-2 transition-colors"
+                    >
+                      <td className="py-3 px-4 font-medium">{row.model}</td>
+                      <td className="py-3 px-4 text-muted-foreground">{row.prompt_name}</td>
+                      <td className="py-3 px-4 text-right">
+                        <span
+                          className={cn(
+                            "inline-block px-2 py-0.5 rounded text-xs font-medium tabular border",
+                            tone.bg,
+                            tone.text,
+                            tone.border
+                          )}
+                        >
+                          {row.score.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right text-xs text-muted-foreground tabular">
+                        {Object.entries(row.metrics)
+                          .map(([k, v]) => `${k}: ${(v as number).toFixed(2)}`)
+                          .join(", ")}
+                      </td>
+                      <td className="py-3 px-4 text-right text-muted-foreground tabular">
+                        {new Date(row.created_at).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
     </div>
   );
 }

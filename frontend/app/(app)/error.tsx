@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { AlertTriangle, RotateCw } from "lucide-react";
 
 export default function AppError({
   error,
@@ -14,31 +15,27 @@ export default function AppError({
   }, [error]);
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <div className="text-center space-y-4 max-w-md mx-auto p-8">
-        <div className="w-16 h-16 mx-auto rounded-full bg-destructive/10 flex items-center justify-center">
-          <svg
-            className="w-8 h-8 text-destructive"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
-            />
-          </svg>
-        </div>
-        <h2 className="text-xl font-semibold">Something went wrong</h2>
-        <p className="text-muted-foreground text-sm">
+    <div className="min-h-[60vh] grid place-items-center px-6">
+      <div className="surface max-w-md w-full p-6 text-center">
+        <span className="grid place-items-center w-11 h-11 mx-auto rounded-lg bg-danger-subtle text-danger">
+          <AlertTriangle className="w-5 h-5" />
+        </span>
+
+        <h2 className="text-base font-semibold tracking-tight mt-4">Something went wrong</h2>
+        <p className="text-sm text-muted-foreground mt-2 break-words">
           {error.message || "An unexpected error occurred."}
         </p>
+        {error.digest && (
+          <p className="text-[0.6875rem] font-mono text-subtle-foreground mt-2">
+            digest {error.digest}
+          </p>
+        )}
+
         <button
-          onClick={() => reset()}
-          className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          onClick={reset}
+          className="inline-flex items-center gap-2 mt-5 px-3.5 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-hover transition-colors"
         >
+          <RotateCw className="w-3.5 h-3.5" />
           Try again
         </button>
       </div>

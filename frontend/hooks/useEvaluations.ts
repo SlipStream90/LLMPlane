@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, unwrapList, type Paginated } from "@/lib/api";
 
 export interface Evaluation {
   id: string;
@@ -26,7 +26,13 @@ export function useEvaluations(params?: {
 
   return useQuery<Evaluation[]>({
     queryKey: ["evaluations", params],
-    queryFn: () => apiFetch(`/evaluations${query ? `?${query}` : ""}`),
+    // `/evaluations` is declared `Page[EvaluationResultOut]` on the backend.
+    queryFn: async () =>
+      unwrapList(
+        await apiFetch<Paginated<Evaluation> | Evaluation[]>(
+          `/evaluations${query ? `?${query}` : ""}`
+        )
+      ),
   });
 }
 

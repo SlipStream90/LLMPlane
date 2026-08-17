@@ -99,6 +99,39 @@ async def stop_deployment(
 
 
 @router.post(
+    "/{deployment_id}/start",
+    response_model=DeploymentOut,
+    summary="Start a stopped deployment",
+)
+async def start_deployment(
+    deployment_id: uuid.UUID, session: SessionDep, project: ProjectDep
+) -> DeploymentOut:
+    """Relaunch a deployment whose container is stopped or errored.
+
+    The worker task (`start_local_model`) already existed and is what the create
+    path dispatches — only this route was missing, so the UI's Start button,
+    which has always called `POST /deployments/{id}/start`, returned 404.
+
+    Like stop/restart, this returns the row as it is *now*: the status change is
+    the worker's to make, and clients should follow the `deployments` WebSocket
+    topic rather than trusting this response body.
+    """
+    service = DeploymentService(session)
+    deployment = await service.get_or_404(deployment_id, project.id)
+    if deployment.status in (
+        DeploymentStatus.RUNNING,
+        DeploymentStatus.PENDING,
+        DeploymentStatus.DOWNLOADING,
+    ):
+        raise ConflictProblem(
+            f"Deployment is already {deployment.status.value}."
+        )
+    await session.commit()
+    workers_client.start_local_model(deployment.id)
+    return DeploymentOut.model_validate(deployment)
+
+
+@router.post(
     "/{deployment_id}/restart",
     response_model=DeploymentOut,
     summary="Restart a deployment",
