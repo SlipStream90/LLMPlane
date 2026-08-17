@@ -1,0 +1,10 @@
+{
+  "id": "openrouter",
+  "display_name": "OpenRouter (Free Models Only)",
+  "auth_type": "api_key",
+  "default_base_url": "https://openrouter.ai/api/v1",
+  "requires_base_url": false,
+  "capabilities": ["chat", "streaming"],
+  "pricing_hint": "Free models only (:free suffix)",
+  "module": "app.plugins.providers.openrouter.plugin"
+}
