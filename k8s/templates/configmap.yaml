@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "llmplane.fullname" . }}-config
+  labels:
+    {{- include "llmplane.labels" . | nindent 4 }}
+data:
+  ENVIRONMENT: {{ .Values.backend.environment | default "prod" | quote }}
+  LOG_LEVEL: {{ .Values.backend.logLevel | default "INFO" | quote }}
+  API_V1_PREFIX: "/api/v1"
+  ENABLE_STREAM_CONSUMER: "false"
+  OTEL_SERVICE_NAME: "llmplane-backend"
+  LANGFUSE_HOST: {{ .Values.observability.langfuse.host | default "https://cloud.langfuse.com" | quote }}

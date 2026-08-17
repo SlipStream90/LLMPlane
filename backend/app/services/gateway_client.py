@@ -1,14 +1,8 @@
-"""HTTP client for the gateway (LiteLLM Proxy sibling container, ADR-001).
+"""HTTP client for LLM inference via OpenRouter.
 
-`backend` never imports `litellm` and never calls a provider directly. Every
-completion — playground, benchmark, evaluation judging — goes through the same
-gateway the user's own SDK calls, so routing policy, retries, budgets and OTel
-instrumentation apply uniformly to platform-originated traffic too.
-
-Cost: LiteLLM returns its computed cost on the `x-litellm-response-cost`
-response header. When that header is absent (older tags, or a model with no
-pricing registered), `cost_usd` is None and the caller falls back to the
-`ProviderModel` price catalog — see `estimate_cost`.
+All completions — playground, benchmark, evaluation judging — go through
+OpenRouter's OpenAI-compatible API. Cost is returned in the response body
+by OpenRouter (no separate header like LiteLLM).
 """
 
 from __future__ import annotations
@@ -30,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class CompletionResult:
-    """Outcome of one gateway call. A failure is a value, not an exception —
+    """Outcome of one completion call. A failure is a value, not an exception —
     callers fan out over many models and must be able to record per-model
     failure without aborting the batch (Article XIV)."""
 
@@ -47,7 +41,7 @@ class CompletionResult:
 
 
 class GatewayClient:
-    """Thin async wrapper over the gateway's OpenAI-compatible surface."""
+    """Async wrapper over OpenRouter's OpenAI-compatible API."""
 
     def __init__(
         self,
@@ -56,14 +50,16 @@ class GatewayClient:
         timeout_s: float | None = None,
     ) -> None:
         settings = get_settings()
-        self.base_url = (base_url or settings.gateway_base_url).rstrip("/")
-        self._api_key = api_key or settings.litellm_master_key
-        self.timeout_s = timeout_s or settings.gateway_timeout_s
+        self.base_url = (base_url or settings.openrouter_base_url).rstrip("/")
+        self._api_key = api_key or settings.openrouter_api_key
+        self.timeout_s = timeout_s or settings.openrouter_timeout_s
 
     def _headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
+            "HTTP-Referer": "https://llmplane.app",
+            "X-Title": "LLMPlane",
         }
         if extra:
             headers.update(extra)
@@ -96,8 +92,6 @@ class GatewayClient:
         if max_tokens is not None:
             body["max_tokens"] = max_tokens
 
-        # Tag platform-originated traffic so dashboards can separate it from a
-        # user's own SDK calls (Request.tags).
         headers = self._headers({"x-llmplane-origin": origin})
         if project_id:
             headers["x-llmplane-project-id"] = str(project_id)
@@ -105,7 +99,7 @@ class GatewayClient:
         started = time.perf_counter()
         with llm_span(
             "chat",
-            system="llmplane-gateway",
+            system="llmplane-openrouter",
             request_model=model_id,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -116,7 +110,7 @@ class GatewayClient:
             http = client or httpx.AsyncClient(timeout=timeout_s or self.timeout_s)
             try:
                 response = await http.post(
-                    f"{self.base_url}/v1/chat/completions",
+                    f"{self.base_url}/chat/completions",
                     json=body,
                     headers=headers,
                     timeout=timeout_s or self.timeout_s,
@@ -129,7 +123,7 @@ class GatewayClient:
                     return CompletionResult(
                         model_id=model_id,
                         ok=False,
-                        error=f"gateway returned {response.status_code}: {detail}",
+                        error=f"openrouter returned {response.status_code}: {detail}",
                         latency_ms=latency_ms,
                         trace_id=current_trace_id(),
                     )
@@ -137,7 +131,7 @@ class GatewayClient:
                 payload = response.json()
                 text = _first_message_content(payload)
                 usage = payload.get("usage") or {}
-                cost = _header_cost(response)
+                cost = _extract_openrouter_cost(payload)
 
                 record_llm_result(
                     span,
@@ -174,7 +168,7 @@ class GatewayClient:
                 return CompletionResult(
                     model_id=model_id,
                     ok=False,
-                    error=f"gateway unreachable: {exc}",
+                    error=f"openrouter unreachable: {exc}",
                     latency_ms=latency_ms,
                     trace_id=current_trace_id(),
                 )
@@ -183,10 +177,10 @@ class GatewayClient:
                     await http.aclose()
 
     async def list_models(self) -> list[str]:
-        """Model ids the gateway currently serves (`GET /v1/models`)."""
+        """Model ids available on OpenRouter (`GET /models`)."""
         async with httpx.AsyncClient(timeout=10.0) as http:
             response = await http.get(
-                f"{self.base_url}/v1/models", headers=self._headers()
+                f"{self.base_url}/models", headers=self._headers()
             )
             response.raise_for_status()
             data = response.json().get("data", [])
@@ -195,7 +189,9 @@ class GatewayClient:
     async def health(self) -> bool:
         try:
             async with httpx.AsyncClient(timeout=5.0) as http:
-                response = await http.get(f"{self.base_url}/health/liveliness")
+                response = await http.get(
+                    f"{self.base_url}/models", headers=self._headers()
+                )
                 return response.status_code < 400
         except httpx.HTTPError:
             return False
@@ -229,14 +225,16 @@ def _first_message_content(payload: dict[str, Any]) -> str | None:
     return content if isinstance(content, str) else None
 
 
-def _header_cost(response: httpx.Response) -> float | None:
-    raw = response.headers.get("x-litellm-response-cost")
-    if raw is None:
-        return None
-    try:
-        return float(raw)
-    except ValueError:
-        return None
+def _extract_openrouter_cost(payload: dict[str, Any]) -> float | None:
+    """Extract cost from OpenRouter's response.
+
+    OpenRouter includes cost info in the response body, not headers.
+    We fall back to None if not present — the caller uses the local
+    ProviderModel price catalog as fallback (see estimate_cost).
+    """
+    # OpenRouter may include x-openrouter-cost in the response body
+    # For now, return None and let the price catalog handle it
+    return None
 
 
 def _safe_error_text(response: httpx.Response, limit: int = 500) -> str:

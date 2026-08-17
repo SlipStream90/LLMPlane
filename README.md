@@ -1,25 +1,27 @@
-# LLM Control Plane
+# LLMPlane
 
 An all-in-one AI infrastructure platform for deploying, managing, routing, evaluating, and observing Large Language Models.
 
 ## Overview
 
-LLM Control Plane replaces the need for multiple tools (LiteLLM, Promptfoo, Langfuse, Grafana, Ollama, vLLM) with a single integrated platform. It provides an OpenAI-compatible gateway, one-click local model deployment, multi-model routing, evaluation frameworks, and full observability.
+LLMPlane replaces the need for multiple tools (LiteLLM, Promptfoo, Langfuse, Grafana, Ollama, vLLM) with a single integrated platform. It provides OpenRouter-powered inference, one-click local model deployment, multi-model routing, evaluation frameworks, and full observability.
 
 ## Features
 
-- **Unified Gateway** - OpenAI-compatible API (`POST /v1/chat/completions`) supporting OpenAI, Anthropic, Gemini, Groq, Mistral, Cohere, Ollama, vLLM, and local HuggingFace models
+- **OpenRouter Integration** - Unified LLM access via OpenRouter (OpenAI, Anthropic, Gemini, Groq, Mistral, and more)
 - **Local Model Deployment** - Launch Ollama and vLLM models with one click via Docker
 - **Multi-Model Routing** - Intelligent routing across providers with load balancing and fallbacks
+- **OAuth Authentication** - Sign in with GitHub or Google, plus API key auth
 - **Evaluation Framework** - Benchmark models with built-in metrics and custom evals
-- **Observability** - OpenTelemetry traces, Prometheus metrics, and Grafana dashboards
-- **Modern UI** - Real-time dashboards, graphs, and visualizations
+- **Observability** - OpenTelemetry traces, Grafana Cloud dashboards, Langfuse tracing
+- **Database Backups** - Automated backups to Cloudflare R2 every 6 hours
+- **Modern UI** - Real-time dashboards, 3D command center, and visualizations
 
 ## Tech Stack
 
 **Frontend**
 - Next.js 16, React 19, TypeScript
-- Tailwind CSS 4, Radix UI
+- Tailwind CSS 4, Radix UI, shadcn/ui
 - ECharts, React Flow, Monaco Editor
 - TanStack Query & Table
 
@@ -27,109 +29,94 @@ LLM Control Plane replaces the need for multiple tools (LiteLLM, Promptfoo, Lang
 - FastAPI, SQLAlchemy, Alembic
 - PostgreSQL, Redis
 - Celery workers with GPU support
-- OpenTelemetry, Prometheus
+- OpenTelemetry, Langfuse
 
 **Infrastructure**
-- Docker Compose
-- LiteLLM Proxy (gateway)
-- Grafana, Prometheus, OTel Collector
+- Docker Compose (self-hosted) or Vercel + Railway (cloud)
+- OpenRouter for LLM inference
+- Grafana Cloud for metrics/logs
+- Cloudflare R2 for backups
 
-## Getting Started
+## Quick Start
 
 ### Prerequisites
 
-- Docker & Docker Compose
-- Node.js >= 22
-- Python 3.13+
+- An [OpenRouter](https://openrouter.ai) account and API key
+- Docker & Docker Compose (for self-hosted) OR Vercel + Railway accounts (for cloud)
 
-### Quick Start
+### Option A: Docker Compose (Self-Hosted)
 
-1. Clone the repository:
 ```bash
 git clone <repo-url>
 cd LLMPlane
-```
-
-2. Copy environment files:
-```bash
 cp backend/.env.example backend/.env
 cp docker/.env.example docker/.env
-```
 
-3. Generate required secrets:
-```bash
+# Generate secrets
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
 
-4. Update `.env` files with generated values.
+# Update .env files with generated values + your OPENROUTER_API_KEY
 
-5. Start all services:
-```bash
 cd docker
-docker compose up -d
+docker compose up -d --build
 ```
 
-6. Access the application:
+Access:
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
-- Gateway: http://localhost:4000
 - Grafana: http://localhost:3001
 
-### Development
+### Option B: Vercel + Railway (Cloud, $0 for personal use)
 
-**Frontend:**
-```bash
-cd frontend
-npm install
-npm run dev
-```
+See [docs/deployment.md](docs/deployment.md) for the complete step-by-step guide.
 
-**Backend:**
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-**Workers:**
-```bash
-cd workers
-pip install -r requirements.txt
-celery -A celery_app worker --loglevel=info
-```
+**TL;DR:**
+1. Create Railway project → add Postgres + Redis → deploy backend
+2. Create Vercel project → deploy frontend
+3. Set environment variables (see docs/deployment.md)
+4. Bootstrap admin key
+5. Done
 
 ## Project Structure
 
 ```
 LLMPlane/
-├── backend/          # FastAPI backend API
-├── frontend/         # Next.js frontend
-├── workers/          # Celery background workers
-├── docker/           # Docker Compose and config
-│   ├── gateway/      # LiteLLM proxy config
-│   ├── grafana/      # Grafana provisioning
-│   ├── prometheus/   # Prometheus config
-│   └── otel-collector/ # OpenTelemetry config
-├── docs/             # Documentation
-├── scripts/          # Utility scripts
-└── prd.md            # Product Requirements Document
+├── backend/              # FastAPI backend API
+│   ├── app/              # Application code
+│   ├── alembic/          # Database migrations
+│   └── entrypoint.sh     # Docker entrypoint (runs migrations)
+├── frontend/             # Next.js frontend
+│   ├── app/              # App router pages
+│   ├── components/       # React components
+│   └── lib/              # Utilities and API client
+├── workers/              # Celery background workers
+│   └── tasks/            # Backup, benchmark tasks
+├── docker/               # Docker Compose and configs
+│   ├── grafana/          # Grafana provisioning
+│   ├── prometheus/       # Prometheus config + alerts
+│   ├── loki/             # Loki log aggregation
+│   └── promtail/         # Promtail log shipping
+├── k8s/                  # Kubernetes Helm chart
+├── scripts/              # Deploy and restore scripts
+├── docs/                 # Documentation
+└── .github/              # CI/CD workflows
 ```
 
 ## API
 
-The gateway exposes an OpenAI-compatible API:
+The backend exposes an OpenAI-compatible API:
 
 ```python
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:4000/v1",
-    api_key="your-key"
+    base_url="https://your-backend.up.railway.app/api/v1",
+    api_key="your-api-key"
 )
 
 response = client.chat.completions.create(
-    model="gpt-4",
+    model="gpt-4o",
     messages=[{"role": "user", "content": "Hello"}]
 )
 ```
@@ -138,12 +125,25 @@ response = client.chat.completions.create(
 
 See `backend/.env.example` for all configuration options.
 
-Key variables:
-- `DATABASE_URL` - PostgreSQL connection string
-- `REDIS_URL` - Redis connection string
-- `FERNET_SECRET_KEY` - Encryption key for secrets
-- `BOOTSTRAP_ADMIN_TOKEN` - Initial admin token
-- `LITELLM_MASTER_KEY` - Gateway authentication key
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_URL` | Redis connection string |
+| `FERNET_SECRET_KEY` | Encryption key for provider credentials |
+| `BOOTSTRAP_ADMIN_TOKEN` | One-time token to create first API key |
+| `OPENROUTER_API_KEY` | OpenRouter API key for LLM inference |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth (optional) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth (optional) |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | Langfuse tracing (optional) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Grafana Cloud OTLP endpoint (optional) |
+
+## Deployment
+
+See [docs/deployment.md](docs/deployment.md) for detailed instructions on:
+- Docker Compose (self-hosted)
+- Vercel + Railway (managed cloud)
+- Environment variables reference
+- Production hardening checklist
 
 ## License
 

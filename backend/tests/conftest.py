@@ -22,7 +22,7 @@ os.environ.setdefault(
     "FERNET_SECRET_KEY", "SFRyx2vEfa7l9GEXY7RXAtnRnJPYq1hAQ9v0RJ5hLxE="
 )
 os.environ.setdefault("BOOTSTRAP_ADMIN_TOKEN", "test-bootstrap-token")
-os.environ.setdefault("LITELLM_MASTER_KEY", "test-master-key")
+os.environ.setdefault("OPENROUTER_API_KEY", "test-openrouter-key")
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("ENABLE_STREAM_CONSUMER", "false")
 

@@ -20,7 +20,10 @@ import {
   DollarSign,
   ExternalLink,
 } from "lucide-react";
-import { NAV_ITEMS, GATEWAY_URL } from "@/lib/constants";
+import { NAV_ITEMS } from "@/lib/constants";
+
+const GRAFANA_URL = process.env.NEXT_PUBLIC_GRAFANA_URL || "http://localhost:3001";
+const LANGFUSE_URL = process.env.NEXT_PUBLIC_LANGFUSE_URL || "https://cloud.langfuse.com";
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard,
@@ -95,7 +98,7 @@ export function CommandPalette() {
             <Command.Item
               value="Grafana"
               onSelect={() => {
-                window.open("http://localhost:3001", "_blank");
+                window.open(GRAFANA_URL, "_blank");
                 setOpen(false);
               }}
               className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-muted transition-colors"
@@ -106,24 +109,13 @@ export function CommandPalette() {
             <Command.Item
               value="Langfuse"
               onSelect={() => {
-                window.open("https://cloud.langfuse.com", "_blank");
+                window.open(LANGFUSE_URL, "_blank");
                 setOpen(false);
               }}
               className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-muted transition-colors"
             >
               <ExternalLink className="h-4 w-4 text-muted-foreground" />
               <span>Langfuse Cloud</span>
-            </Command.Item>
-            <Command.Item
-              value="LiteLLM"
-              onSelect={() => {
-                window.open(GATEWAY_URL + "/ui", "_blank");
-                setOpen(false);
-              }}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-muted transition-colors"
-            >
-              <ExternalLink className="h-4 w-4 text-muted-foreground" />
-              <span>LiteLLM Gateway UI</span>
             </Command.Item>
           </Command.Group>
         </Command.List>

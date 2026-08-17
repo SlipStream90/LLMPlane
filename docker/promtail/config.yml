@@ -1,0 +1,82 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Scrape all Docker container logs via the Docker socket
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          __path__: /var/lib/docker/containers/*/*-json.log
+
+    pipeline_stages:
+      # Docker logs are JSON: extract timestamp, level, message
+      - json:
+          expressions:
+            log: log
+            stream: stream
+            time: time
+
+      - labels:
+          stream:
+
+      - timestamp:
+          source: time
+          format: RFC3339Nano
+
+      # Extract log level from common patterns
+      - regex:
+          expression: '(?i)(?P<level>(TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|CRITICAL))'
+
+      - labels:
+          level:
+
+      # If the log line is JSON, try to extract the message field
+      - json:
+          expressions:
+            msg: msg
+            message: message
+            level: level
+
+      - labels:
+          level:
+
+      - output:
+          source: message
+
+  # Scrape backend structured JSON logs (if LOG_FILE is set)
+  - job_name: backend-file
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: backend
+          __path__: /var/log/llmplane/*.jsonl
+
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            message: message
+            method: method
+            path: path
+            status: status
+            request_id: request_id
+
+      - labels:
+          level:
+          method:
+          path:
+
+      - timestamp:
+          source: time
+          format: RFC3339Nano

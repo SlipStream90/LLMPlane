@@ -1,0 +1,13 @@
+apiVersion: v2
+name: llmplane
+description: LLM Control Plane — Deploy, Route, Evaluate, Observe
+type: application
+version: 0.1.0
+appVersion: "0.1.0-alpha"
+maintainers:
+  - name: LLMPlane
+keywords:
+  - llm
+  - ai
+  - infrastructure
+  - control-plane

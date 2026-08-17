@@ -5,6 +5,10 @@
 through the router-level dependency wired in `api/v1/__init__.py` — except
 `/api/v1/auth/bootstrap-key`, which cannot (there is no key yet) and instead
 verifies the bootstrap token.
+
+Supports two auth methods:
+  1. API key: `Authorization: Bearer llcp_xxxx_...`
+  2. JWT session token: from cookie `llcp_session` or `Authorization: Bearer <jwt>`
 """
 
 from __future__ import annotations
@@ -13,58 +17,124 @@ from typing import Annotated
 
 from fastapi import Depends, Header, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.db import get_session
 from app.core.errors import ProblemException
-from app.core.security import constant_time_compare
+from app.core.security import constant_time_compare, decode_access_token
 from app.models.tenancy import APIKey, Project
+from app.models.user import User
 from app.repositories.tenancy import APIKeyRepository
 
 #: `auto_error=False` so a missing header produces our RFC 7807 body rather
 #: than Starlette's default JSON shape.
-bearer_scheme = HTTPBearer(auto_error=False, description="Project API key")
+bearer_scheme = HTTPBearer(auto_error=False, description="Project API key or JWT session token")
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 class AuthContext:
-    """The authenticated caller: a project plus the key that identified it."""
+    """The authenticated caller: a project plus the key that identified it.
+    For OAuth users, api_key may be None and user will be set instead."""
 
-    __slots__ = ("api_key", "project")
+    __slots__ = ("api_key", "project", "user")
 
-    def __init__(self, project: Project, api_key: APIKey) -> None:
+    def __init__(self, project: Project, api_key: APIKey | None = None, user: User | None = None) -> None:
         self.project = project
         self.api_key = api_key
+        self.user = user
 
     @property
     def project_id(self):
         return self.project.id
 
     def has_scope(self, scope: str) -> bool:
-        return scope in (self.api_key.scopes or [])
+        if self.api_key:
+            return scope in (self.api_key.scopes or [])
+        # OAuth users get admin scope by default (they are the account owner)
+        if self.user:
+            return True
+        return False
+
+
+def _extract_bearer_token(credentials: HTTPAuthorizationCredentials | None) -> str | None:
+    """Extract bearer token from Authorization header."""
+    if credentials and credentials.credentials:
+        return credentials.credentials
+    return None
+
+
+def _extract_session_token(request: Request) -> str | None:
+    """Extract session token from cookie."""
+    return request.cookies.get("llcp_session")
 
 
 async def get_auth_context(
     session: SessionDep,
+    request: Request,
     credentials: Annotated[
         HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
     ] = None,
 ) -> AuthContext:
-    if credentials is None or not credentials.credentials:
+    """Authenticate via API key (Bearer token) or JWT session cookie."""
+    settings = get_settings()
+
+    # Try JWT session token first (from cookie or header)
+    jwt_token = _extract_session_token(request) or _extract_bearer_token(credentials)
+    if jwt_token and "." in jwt_token:  # JWT tokens contain dots
+        payload = decode_access_token(jwt_token, settings.fernet_secret_key)
+        if payload:
+            user_id = payload.get("sub")
+            result = await session.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            if user:
+                # Load or create default project for OAuth user
+                project = None
+                if user.default_project_id:
+                    project = await session.get(Project, user.default_project_id)
+                if project is None:
+                    # Fallback: get or create default project
+                    from app.repositories.tenancy import OrganizationRepository, ProjectRepository
+                    orgs = OrganizationRepository(session)
+                    projects = ProjectRepository(session)
+                    org = await orgs.get_or_create_default()
+                    project = await projects.get_by_slug("default")
+                    if project is None:
+                        project = await projects.add(
+                            Project(
+                                organization_id=org.id,
+                                name="Default Project",
+                                slug="default",
+                            )
+                        )
+                    user.default_project_id = project.id
+                    await session.commit()
+
+                # Create a virtual API key for OAuth users (admin scope)
+                virtual_key = APIKey(
+                    project_id=project.id,
+                    name="oauth-session",
+                    key_prefix="oauth",
+                    key_hash="",
+                    scopes=["admin", "gateway"],
+                )
+                return AuthContext(project=project, api_key=virtual_key, user=user)
+
+    # Fall back to API key auth
+    token = _extract_bearer_token(credentials)
+    if not token:
         raise ProblemException(
             status.HTTP_401_UNAUTHORIZED,
-            "Missing 'Authorization: Bearer {project_api_key}' header.",
+            "Missing 'Authorization: Bearer {token}' header. Provide an API key or log in via OAuth.",
             type_="https://llmplane.dev/problems/unauthenticated",
         )
 
     repo = APIKeyRepository(session)
-    api_key = await repo.resolve(credentials.credentials)
+    api_key = await repo.resolve(token)
     if api_key is None:
-        # One message for "no such key", "revoked" and "wrong key" alike — an
-        # error that distinguishes them is an oracle for key enumeration.
         raise ProblemException(
             status.HTTP_401_UNAUTHORIZED,
             "The provided API key is not valid.",

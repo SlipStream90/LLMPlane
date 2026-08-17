@@ -10,6 +10,14 @@ datasources:
     jsonData:
       timeInterval: "15s"
 
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+
   - name: PostgreSQL
     type: postgres
     access: proxy

@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1 import api_router
 from app.api.v1 import ws as ws_module
@@ -90,7 +91,46 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         docs_url="/docs",
         openapi_url="/openapi.json",
+        openapi_tags=[
+            {"name": "auth", "description": "Bootstrap authentication"},
+            {"name": "providers", "description": "LLM provider management"},
+            {"name": "deployments", "description": "Model deployment lifecycle"},
+            {"name": "routing", "description": "Traffic routing policies"},
+            {"name": "playground", "description": "Interactive model testing"},
+            {"name": "prompts", "description": "Prompt version management"},
+            {"name": "experiments", "description": "A/B experiments"},
+            {"name": "benchmarks", "description": "Benchmark datasets and runs"},
+            {"name": "evaluations", "description": "Model evaluation results"},
+            {"name": "dashboard", "description": "Dashboard aggregates"},
+            {"name": "cost-analytics", "description": "Cost analysis"},
+            {"name": "logs", "description": "Structured log explorer"},
+            {"name": "traces", "description": "OpenTelemetry traces"},
+        ],
     )
+
+    # Declare API key security scheme for Swagger UI
+    app.openapi_schema = None  # Force regeneration with security
+
+    _original_openapi = app.openapi
+
+    def _openapi_with_security():
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = _original_openapi()
+        schema["components"] = schema.get("components", {})
+        schema["components"]["securitySchemes"] = {
+            "ApiKeyAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "Authorization",
+                "description": "Bearer token: `Bearer <api_key>`",
+            }
+        }
+        schema["security"] = [{"ApiKeyAuth": []}]
+        app.openapi_schema = schema
+        return app.openapi_schema
+
+    app.openapi = _openapi_with_security
 
     # Restricted to the configured frontend origin(s); never "*"
     # (ARCHITECTURE.md 4.5).
@@ -101,6 +141,64 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # ── Rate limiting (per-API-key sliding window) ────────────────────────
+    # Uses an in-process counter backed by Redis TTL for simplicity at alpha
+    # scale. Replace with redis sliding-window or SlowAPI for production
+    # multi-instance deployments.
+    import time
+
+    _rate_buckets: dict[str, tuple[float, int]] = {}
+
+    @app.middleware("http")
+    async def rate_limit_middleware(request: Request, call_next):
+        # Skip rate limiting for health/docs/metrics endpoints
+        if request.url.path in ("/health", "/ready", "/docs", "/openapi.json", "/metrics"):
+            return await call_next(request)
+
+        api_key = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+        if not api_key:
+            return await call_next(request)
+
+        now = time.time()
+        bucket_key = f"rl:{api_key}"
+        window = 60  # 1 minute window
+
+        if bucket_key in _rate_buckets:
+            window_start, count = _rate_buckets[bucket_key]
+            if now - window_start > window:
+                _rate_buckets[bucket_key] = (now, 1)
+            elif count >= 600:  # default 600 RPM
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Rate limit exceeded. Try again later."},
+                    headers={"Retry-After": str(int(window - (now - window_start)))},
+                )
+            else:
+                _rate_buckets[bucket_key] = (window_start, count + 1)
+        else:
+            _rate_buckets[bucket_key] = (now, 1)
+
+        # Periodic cleanup of expired buckets (every ~100 requests)
+        if len(_rate_buckets) > 100:
+            expired = [k for k, (start, _) in _rate_buckets.items() if now - start > window]
+            for k in expired:
+                del _rate_buckets[k]
+
+        return await call_next(request)
+
+    # ── Security headers ──────────────────────────────────────────────────
+    @app.middleware("http")
+    async def security_headers_middleware(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if settings.environment == "prod":
+            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+        return response
 
     @app.middleware("http")
     async def request_logging(request: Request, call_next):

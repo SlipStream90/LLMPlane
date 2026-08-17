@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "llmplane.fullname" . }}-workers
+  labels:
+    {{- include "llmplane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workers
+spec:
+  replicas: {{ .Values.workers.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "llmplane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: workers
+  template:
+    metadata:
+      labels:
+        {{- include "llmplane.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: workers
+    spec:
+      containers:
+        - name: workers
+          image: {{ include "llmplane.image" (dict "global" .Values.global "name" "workers" "tag" .Values.workers.image.tag) }}
+          imagePullPolicy: Always
+          command: ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "llmplane.fullname" . }}-config
+            - secretRef:
+                name: {{ .Values.secrets.name }}
+          resources:
+            {{- toYaml .Values.workers.resources | nindent 12 }}
+      {{- if .Values.workers.gpu.enabled }}
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4
+      {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "llmplane.fullname" . }}-scheduler
+  labels:
+    {{- include "llmplane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "llmplane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: scheduler
+  template:
+    metadata:
+      labels:
+        {{- include "llmplane.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: scheduler
+    spec:
+      containers:
+        - name: scheduler
+          image: {{ include "llmplane.image" (dict "global" .Values.global "name" "workers" "tag" .Values.workers.image.tag) }}
+          imagePullPolicy: Always
+          command: ["celery", "-A", "celery_app", "beat", "--loglevel=info"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "llmplane.fullname" . }}-config
+            - secretRef:
+                name: {{ .Values.secrets.name }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

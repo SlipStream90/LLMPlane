@@ -48,19 +48,12 @@ class Settings(BaseSettings):
     # ---- secrets (names only; values come from the environment) ----------
     fernet_secret_key: str
     bootstrap_admin_token: str
-    litellm_master_key: str
 
-    # ---- gateway (LiteLLM Proxy sibling container, ADR-001) --------------
-    gateway_base_url: str = "http://gateway:4000"
-    # Path to the config.yaml rendered by RoutingConfigService onto the volume
-    # shared with the gateway container.
-    litellm_config_path: str = "/config/config.yaml"
-    # LiteLLM Proxy exposes POST /config/update for hot config reload (verified
-    # against docs.litellm.ai/docs/proxy/configs on 2026-08-01). If the pinned
-    # tag does not expose it, RoutingConfigService reports the push as deferred
-    # rather than silently claiming success (T010 note).
-    gateway_config_update_path: str = "/config/update"
-    gateway_timeout_s: float = 60.0
+    # ---- OpenRouter (replaces LiteLLM gateway) ---------------------------
+    # API key from https://openrouter.ai/keys
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_timeout_s: float = 60.0
 
     # ---- request ingest (ADR-004) ---------------------------------------
     requests_stream_key: str = "requests:completed"
@@ -88,6 +81,19 @@ class Settings(BaseSettings):
     default_page_limit: int = 50
     max_page_limit: int = 200
 
+    # ---- OAuth (GitHub + Google) -----------------------------------------
+    # Leave empty to disable OAuth login. When both are empty, only API key
+    # auth is available. Create OAuth apps at:
+    #   GitHub: https://github.com/settings/developers → New OAuth App
+    #   Google: https://console.cloud.google.com/apis/credentials → Create OAuth client
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    # Base URL for OAuth callbacks (e.g. http://localhost:8000 or https://your-domain.com)
+    # Must match the callback URL configured in the OAuth app settings.
+    oauth_callback_base_url: str = "http://localhost:8000"
+
     @field_validator("database_url")
     @classmethod
     def _require_async_driver(cls, v: str) -> str:
@@ -103,8 +109,11 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
-    def gateway_config_update_url(self) -> str:
-        return f"{self.gateway_base_url.rstrip('/')}{self.gateway_config_update_path}"
+    def openrouter_headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.openrouter_api_key}",
+            "Content-Type": "application/json",
+        }
 
 
 @lru_cache

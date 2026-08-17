@@ -22,8 +22,11 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
       - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -49,30 +52,6 @@ services:
     networks:
       - llcp-internal
 
-  # ── LiteLLM Gateway ────────────────────────────────────────────
-  gateway:
-    image: ghcr.io/berriai/litellm:1.63.14
-    restart: unless-stopped
-    volumes:
-      - ./gateway/config.yaml:/app/config.yaml:ro
-    command: ["--config", "/app/config.yaml", "--port", "4000"]
-    ports:
-      - "127.0.0.1:4000:4000"
-    environment:
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    networks:
-      - llcp-internal
-      - llcp-public
-
   # ── Backend API ────────────────────────────────────────────────
   backend:
     build:
@@ -86,10 +65,15 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - FERNET_SECRET_KEY=${FERNET_SECRET_KEY}
       - BOOTSTRAP_ADMIN_TOKEN=${BOOTSTRAP_ADMIN_TOKEN}
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - ENABLE_STREAM_CONSUMER=true
       - DOCKER_HOST=http://docker-socket-proxy:2375
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - OAUTH_CALLBACK_BASE_URL=${OAUTH_CALLBACK_BASE_URL:-http://localhost:8000}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -122,6 +106,12 @@ services:
       - FERNET_SECRET_KEY=${FERNET_SECRET_KEY}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - DOCKER_HOST=http://docker-socket-proxy:2375
+      - S3_BUCKET=${S3_BUCKET:-}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-}
+      - S3_REGION=${S3_REGION:-auto}
+      - S3_PREFIX=${S3_PREFIX:-llmplane/backups}
     command: ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--concurrency=4"]
     depends_on:
       postgres:
@@ -185,7 +175,6 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:8000/api/v1
       - NEXT_PUBLIC_WS_URL=ws://backend:8000/ws
-      - NEXT_PUBLIC_GATEWAY_URL=http://gateway:4000
     depends_on:
       backend:
         condition: service_healthy
@@ -203,6 +192,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
       - prometheus_data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
@@ -228,6 +218,8 @@ services:
     depends_on:
       prometheus:
         condition: service_healthy
+      loki:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 10s
@@ -236,6 +228,39 @@ services:
     networks:
       - llcp-internal
       - llcp-public
+
+  loki:
+    image: grafana/loki:3.1.0
+    restart: unless-stopped
+    volumes:
+      - ./loki/config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "127.0.0.1:3100:3100"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - llcp-internal
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    restart: unless-stopped
+    volumes:
+      - ./promtail/config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail_data:/tmp
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - llcp-internal
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.104.0
@@ -254,10 +279,34 @@ services:
     networks:
       - llcp-internal
 
+  # ── DCGM Exporter (GPU metrics, requires NVIDIA GPU) ──────────────
+  # Uncomment this service if you have NVIDIA GPUs and want GPU metrics
+  # in Grafana (DCGM_FI_DEV_GPU_UTIL, DGM_FI_DEV_FB_USED, etc.).
+  # Requires: nvidia-container-toolkit installed on the host.
+  # dcgm-exporter:
+  #   image: nvcr.io/nvidia/k8s/dcgm-exporter:3.3.8-3.6.0-ubuntu22.04
+  #   restart: unless-stopped
+  #   ports:
+  #     - "127.0.0.1:9400:9400"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+  #   networks:
+  #     - llcp-internal
+
 volumes:
   postgres_data:
+  redis_data:
   prometheus_data:
   grafana_data:
+  loki_data:
+  promtail_data:
   benchmark_uploads:
 
 networks:

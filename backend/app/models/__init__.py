@@ -30,6 +30,7 @@ from app.models.provider import Provider, ProviderModel
 from app.models.request import Request
 from app.models.routing import RoutingPolicy
 from app.models.tenancy import APIKey, Organization, Project
+from app.models.user import User
 
 __all__ = [
     "METRIC_NAME_ALLOWLIST",
@@ -66,4 +67,5 @@ __all__ = [
     "RunStatus",
     "TimestampMixin",
     "UUIDPrimaryKeyMixin",
+    "User",
 ]

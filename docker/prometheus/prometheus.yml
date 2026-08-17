@@ -2,6 +2,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - "alert_rules.yml"
+
 scrape_configs:
   - job_name: "otel-collector"
     static_configs:
@@ -12,7 +15,7 @@ scrape_configs:
       - targets: ["backend:8000"]
     metrics_path: "/metrics"
 
-  - job_name: "gateway"
-    static_configs:
-      - targets: ["gateway:4000"]
-    metrics_path: "/metrics"
+  # Uncomment when dcgm-exporter service is enabled (see docker-compose.yml)
+  # - job_name: "dcgm"
+  #   static_configs:
+  #     - targets: ["dcgm-exporter:9400"]

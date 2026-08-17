@@ -1,3 +1,11 @@
+[project]
+name = "llmplane-backend"
+version = "0.1.0-alpha"
+description = "Control-plane API for the LLM Control Plane"
+requires-python = ">=3.12"
+license = "MIT"
+readme = "README.md"
+
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = [
     "fastapi.Depends",
@@ -9,3 +17,20 @@ extend-immutable-calls = [
     "fastapi.Form",
     "fastapi.File",
 ]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]

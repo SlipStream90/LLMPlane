@@ -64,11 +64,17 @@ celery_app.conf.update(
             # Daily (data-models.md 3).
             "schedule": 60.0 * 60.0 * 24.0,
         },
+        "database-backup": {
+            "task": "workers.tasks.backup.database_backup",
+            # Every 6 hours — 48 hourly + 7 daily retention
+            "schedule": 60.0 * 60.0 * 6.0,
+        },
     },
 )
 
 celery_app.autodiscover_tasks(
     [
+        "workers.tasks.backup",
         "workers.tasks.benchmark",
         "workers.tasks.deployment",
         "workers.tasks.evaluation",

@@ -1,0 +1,91 @@
+groups:
+  - name: llmplane_alerts
+    rules:
+      # Backend down
+      - alert: BackendDown
+        expr: up{job="backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend API is down"
+          description: "The LLMPlane backend has been unreachable for more than 1 minute."
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          (
+            rate(otelcol_exporter_send_failed_spans_total[5m])
+            /
+            rate(otelcol_exporter_sent_spans_total[5m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "More than 5% of spans are failing to export."
+
+      # High latency (P95 > 2s)
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency"
+          description: "P95 latency exceeds 2 seconds for more than 5 minutes."
+
+      # Redis down
+      - alert: RedisDown
+        expr: up{job="otel-collector"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is unreachable"
+          description: "Redis has been down for more than 1 minute."
+
+      # Postgres down (via backend readiness probe)
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been unreachable for more than 1 minute."
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (process_resident_memory_bytes / 1024 / 1024) > 512
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Backend memory usage exceeds 512MB."
+
+      # Backup failed (Celery task failure)
+      - alert: BackupFailed
+        expr: |
+          celery_task_failed_total{task_name="workers.tasks.backup.database_backup"} > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database backup failed"
+          description: "The scheduled database backup task has failed. Check worker logs."
+
+      # No recent backup (stale backup)
+      - alert: BackupStale
+        expr: |
+          time() - celery_task_last_success_timestamp_seconds{task_name="workers.tasks.backup.database_backup"} > 25920
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No backup in last 6+ hours"
+          description: "The database backup task has not completed successfully in over 6 hours."

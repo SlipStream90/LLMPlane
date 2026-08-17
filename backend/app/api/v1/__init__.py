@@ -21,6 +21,7 @@ from app.api.v1 import (
     experiments,
     leaderboard,
     logs,
+    oauth,
     playground,
     projects,
     prompts,
@@ -33,6 +34,9 @@ api_router = APIRouter()
 
 # Unauthenticated by API key (bootstrap-token protected instead).
 api_router.include_router(auth.router)
+
+# OAuth routes (unauthenticated — handle their own auth)
+api_router.include_router(oauth.router)
 
 _authenticated = APIRouter(dependencies=[Depends(get_auth_context)])
 for module in (

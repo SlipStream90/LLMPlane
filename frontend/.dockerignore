@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.git/
+.github/
+.gitignore
+*.md
+.env
+.env.*
+backend/
+docker/
+workers/
+scripts/

@@ -1,12 +1,42 @@
 __pycache__/
 *.pyc
+*.pyo
 tsconfig.tsbuildinfo
 node_modules/
 .next/
+.vercel/
 
 # Local secrets — never commit real env files, only *.env.example
 .env
 .env.*
 !.env.example
 !*.env.example
+
+# Coverage
 backend/.coverage
+htmlcov/
+.coverage
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Temp files
+tmp/
+tmp_*/
+*.tmp

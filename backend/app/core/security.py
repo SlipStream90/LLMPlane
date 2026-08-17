@@ -1,4 +1,4 @@
-"""API key generation, hashing and verification.
+"""API key generation, hashing and verification + JWT session tokens.
 
 Key format (ARCHITECTURE.md 4.1): ``llcp_{project_short_id}_{secret}``
 
@@ -17,9 +17,11 @@ from __future__ import annotations
 import hmac
 import secrets
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+from jose import JWTError, jwt
 
 KEY_NAMESPACE = "llcp"
 PREFIX_LENGTH = 8
@@ -34,6 +36,10 @@ _hasher = PasswordHasher(
     hash_len=32,
     salt_len=16,
 )
+
+# ── JWT config ────────────────────────────────────────────────────────────
+JWT_ALGORITHM = "HS256"
+JWT_ACCESS_TOKEN_EXPIRE_HOURS = 24 * 7  # 7 days
 
 
 def project_short_id(project_id: uuid.UUID) -> str:
@@ -87,3 +93,34 @@ def mask_secret(value: str, keep: int = 4) -> str:
     if len(value) <= keep:
         return "*" * len(value)
     return f"{'*' * 8}{value[-keep:]}"
+
+
+# ── JWT helpers ────────────────────────────────────────────────────────────
+
+def create_access_token(
+    user_id: uuid.UUID,
+    email: str,
+    secret_key: str,
+    expires_delta: timedelta | None = None,
+) -> str:
+    """Create a JWT access token for an authenticated user."""
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=JWT_ACCESS_TOKEN_EXPIRE_HOURS))
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+        "type": "access",
+    }
+    return jwt.encode(payload, secret_key, algorithm=JWT_ALGORITHM)
+
+
+def decode_access_token(token: str, secret_key: str) -> dict | None:
+    """Decode and verify a JWT access token. Returns the payload or None."""
+    try:
+        payload = jwt.decode(token, secret_key, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            return None
+        return payload
+    except JWTError:
+        return None

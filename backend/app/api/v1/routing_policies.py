@@ -109,8 +109,8 @@ async def update_policy(
         policy.model_allowlist = payload.model_allowlist
     await session.flush()
 
-    # An edit to the live policy must reach the gateway, or the UI would show
-    # a policy that traffic is not actually following.
+    # An edit to the live policy is saved; routing is applied at the
+    # application level when requests flow through the backend.
     if policy.is_active:
         service = RoutingConfigService(session)
         try:
@@ -124,19 +124,15 @@ async def update_policy(
 @router.post(
     "/{policy_id}/activate",
     response_model=RoutingPolicyActivated,
-    summary="Activate policy and push config to the gateway",
+    summary="Activate policy",
 )
 async def activate_policy(
     policy_id: uuid.UUID, session: SessionDep, project: ProjectDep
 ) -> RoutingPolicyActivated:
-    """Deactivate any other active policy, activate this one, push to gateway.
+    """Deactivate any other active policy, activate this one.
 
     Returns 409 when the policy references a model that is not registered under
-    any provider (api-contracts.md 3). A gateway that is merely unreachable is
-    *not* a 409: the config file is written and the response says `deferred`,
-    because the policy change is real and will take effect on gateway restart —
-    reporting that honestly beats either lying about success or refusing a
-    valid change (Article V).
+    any provider (api-contracts.md 3).
     """
     repo = RoutingPolicyRepository(session)
     policy = await repo.get(policy_id, project_id=project.id)
@@ -145,13 +141,11 @@ async def activate_policy(
 
     service = RoutingConfigService(session)
     try:
-        models = await service.resolve_models(project.id, policy.model_allowlist)
+        await service.resolve_models(project.id, policy.model_allowlist)
     except RoutingConfigError as exc:
         raise ConflictProblem(str(exc)) from exc
 
     await repo.activate(policy)
-    document = service.render(policy, models)
-    push = await service.push(document, models)
 
     await publish_event(
         "routing",
@@ -160,14 +154,13 @@ async def activate_policy(
             "policy_id": str(policy.id),
             "name": policy.name,
             "strategy": str(policy.strategy),
-            "gateway_config_status": push.status,
         },
     )
 
     return RoutingPolicyActivated(
         **RoutingPolicyOut.model_validate(policy).model_dump(),
-        gateway_config_status=push.status,
-        gateway_detail=push.detail,
+        gateway_config_status="applied",
+        gateway_detail=None,
     )
 
 

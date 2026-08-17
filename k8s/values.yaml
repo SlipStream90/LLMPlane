@@ -1,0 +1,134 @@
+# ──────────────────────────────────────────────────────────────
+# LLMPlane Helm Values
+# ──────────────────────────────────────────────────────────────
+# Copy to values.yaml and customize for your cluster.
+
+global:
+  imageRegistry: ghcr.io
+  imagePrefix: "your-org/llmplane"
+
+# ── Backend API ───────────────────────────────────────────────
+backend:
+  replicaCount: 2
+  image:
+    tag: "latest"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 8000
+
+# ── Frontend ──────────────────────────────────────────────────
+frontend:
+  replicaCount: 2
+  image:
+    tag: "latest"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  service:
+    type: ClusterIP
+    port: 3000
+
+# ── Workers (Celery) ─────────────────────────────────────────
+workers:
+  replicaCount: 1
+  image:
+    tag: "latest"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  # Set to true if using GPU workloads (requires GPU node pool)
+  gpu:
+    enabled: false
+
+# ── PostgreSQL ────────────────────────────────────────────────
+postgres:
+  enabled: true  # Set false to use external DB (e.g. RDS, Supabase)
+  image:
+    tag: "16-alpine"
+  storage: 20Gi
+  storageClassName: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# ── Redis ─────────────────────────────────────────────────────
+redis:
+  enabled: true  # Set false to use external Redis (e.g. ElastiCache)
+  image:
+    tag: "7-alpine"
+  storage: 5Gi
+  storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ── Observability ─────────────────────────────────────────────
+prometheus:
+  enabled: true
+  storage: 10Gi
+
+grafana:
+  enabled: true
+  adminPassword: "admin"
+
+loki:
+  enabled: true
+  storage: 10Gi
+
+# ── Ingress ───────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: llmplane.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: backend
+          port: 8000
+        - path: /ws
+          pathType: Prefix
+          service: backend
+          port: 8000
+        - path: /
+          pathType: Prefix
+          service: frontend
+          port: 3000
+  tls:
+    - secretName: llmplane-tls
+      hosts:
+        - llmplane.example.com
+
+# ── Secrets (reference existing K8s secrets) ──────────────────
+# Create these secrets before installing the chart:
+#   kubectl create secret generic llmplane-secrets \
+#     --from-literal=DATABASE_URL='postgresql+asyncpg://...' \
+#     --from-literal=FERNET_SECRET_KEY='...' \
+#     ...
+secrets:
+  name: llmplane-secrets
