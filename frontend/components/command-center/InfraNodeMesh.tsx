@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import type { InfraNode, NodeState } from "./types";
@@ -80,16 +80,16 @@ export function InfraNodeMesh({
     <group position={node.position}>
       <group
         ref={groupRef}
-        onClick={(e) => {
+        onClick={(e: ThreeEvent<MouseEvent>) => {
           e.stopPropagation();
           onSelect(node.id);
         }}
-        onPointerOver={(e) => {
+        onPointerOver={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation();
           onHover(node.id);
           document.body.style.cursor = "pointer";
         }}
-        onPointerOut={(e) => {
+        onPointerOut={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation();
           onHover(null);
           document.body.style.cursor = "auto";
