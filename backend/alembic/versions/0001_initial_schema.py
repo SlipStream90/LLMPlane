@@ -82,10 +82,22 @@ def _timestamps() -> list[sa.Column]:
     ]
 
 
+def _create_enum(bind, enum):
+    """Create a PostgreSQL ENUM type idempotently (checkfirst is unreliable with asyncpg)."""
+    from sqlalchemy import text
+    values = ", ".join(f"'{v}'" for v in enum.enums)
+    bind.execute(text(
+        f"DO $$ BEGIN "
+        f"CREATE TYPE {enum.name} AS ENUM ({values}); "
+        f"EXCEPTION WHEN duplicate_object THEN NULL; "
+        f"END $$"
+    ))
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     for enum in _ENUMS:
-        enum.create(bind, checkfirst=True)
+        _create_enum(bind, enum)
 
     # ---- tenancy --------------------------------------------------------
     op.create_table(
