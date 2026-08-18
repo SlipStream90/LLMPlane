@@ -44,6 +44,9 @@ export function Header() {
     }
     localStorage.removeItem("llcp_session_token");
     localStorage.removeItem("llcp_user");
+    // Also clear the API key, or "sign out" left the browser fully
+    // authenticated via the bearer token and every page kept loading data.
+    localStorage.removeItem("llcp_api_key");
     router.push("/");
   }
 

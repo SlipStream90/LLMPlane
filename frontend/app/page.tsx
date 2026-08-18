@@ -2,109 +2,271 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { API_BASE_URL } from "@/lib/constants";
+import { API_BASE_URL } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { KeyRound, Sparkles, Loader2, Copy, Check, AlertTriangle } from "lucide-react";
 
+type Mode = "key" | "bootstrap";
+
+/**
+ * Sign-in.
+ *
+ * The API-key path exists because it is the only one that works without OAuth
+ * credentials configured on the backend. Previously this screen offered "Or use
+ * an API key directly", which merely routed to /dashboard without collecting or
+ * storing anything — so the app landed unauthenticated and every request 401'd.
+ * `llcp_api_key` was read in two places and written in none.
+ */
 export default function LoginPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<Mode>("key");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Check if already logged in
+  const [apiKey, setApiKey] = useState("");
+  const [bootstrapToken, setBootstrapToken] = useState("");
+  const [mintedKey, setMintedKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
-    const token = localStorage.getItem("llcp_session_token");
-    if (token) {
+    if (localStorage.getItem("llcp_session_token") || localStorage.getItem("llcp_api_key")) {
       router.replace("/dashboard");
     }
   }, [router]);
 
-  const handleOAuthLogin = async (provider: "github" | "google") => {
-    setLoading(true);
+  /** Verify a key against a cheap authenticated endpoint before persisting it. */
+  async function verifyAndStore(key: string): Promise<boolean> {
+    const res = await fetch(`${API_BASE_URL}/providers`, {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    if (res.status === 401 || res.status === 403) {
+      setError("That API key was rejected by the backend.");
+      return false;
+    }
+    if (!res.ok) {
+      setError(
+        `The backend answered ${res.status} for /providers. If this is a 404, ` +
+          `NEXT_PUBLIC_API_URL is pointing at the wrong path.`
+      );
+      return false;
+    }
+    localStorage.setItem("llcp_api_key", key);
+    return true;
+  }
+
+  async function submitKey(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
     setError(null);
     try {
-      // Redirect to backend OAuth login endpoint
-      window.location.href = `${API_BASE_URL}/auth/oauth/${provider}/login`;
+      if (await verifyAndStore(apiKey.trim())) router.replace("/dashboard");
     } catch {
-      setError("Failed to start login. Please try again.");
-      setLoading(false);
+      setError("Could not reach the backend. Check NEXT_PUBLIC_API_URL and CORS.");
+    } finally {
+      setBusy(false);
     }
-  };
+  }
+
+  async function submitBootstrap(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/bootstrap-key`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Bootstrap-Token": bootstrapToken.trim(),
+        },
+        body: JSON.stringify({}),
+      });
+      const body = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        // 409 means a key already exists — the endpoint refuses to mint a second
+        // one unless explicitly asked, to avoid silently proliferating admin keys.
+        setError(
+          body?.detail ??
+            (res.status === 401
+              ? "That bootstrap token was rejected."
+              : `Bootstrap failed (${res.status}).`)
+        );
+        return;
+      }
+
+      const key: string | undefined = body?.api_key?.key;
+      if (!key) {
+        setError("The backend did not return a key.");
+        return;
+      }
+      localStorage.setItem("llcp_api_key", key);
+      setMintedKey(key);
+    } catch {
+      setError("Could not reach the backend. Check NEXT_PUBLIC_API_URL and CORS.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function oauth(provider: "github" | "google") {
+    window.location.href = `${API_BASE_URL}/auth/oauth/${provider}/login`;
+  }
+
+  if (mintedKey) {
+    return (
+      <main className="min-h-screen grid place-items-center px-6 grid-bg">
+        <div className="surface max-w-md w-full p-6">
+          <h1 className="text-lg font-semibold tracking-tight">Your admin API key</h1>
+          <p className="text-sm text-muted-foreground mt-2">
+            Copy it now — the backend stores only a hash and cannot show it again. It has
+            been saved to this browser, so you are already signed in.
+          </p>
+          <div className="mt-4 flex items-center gap-2">
+            <code className="flex-1 px-3 py-2 rounded-md bg-surface-2 border border-border font-mono text-xs break-all">
+              {mintedKey}
+            </code>
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText(mintedKey);
+                setCopied(true);
+              }}
+              aria-label="Copy API key"
+              className="p-2 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-surface-2 transition-colors"
+            >
+              {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+            </button>
+          </div>
+          <button
+            onClick={() => router.replace("/dashboard")}
+            className="w-full mt-5 px-4 py-2.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-hover transition-colors"
+          >
+            Continue to dashboard
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-md mx-auto p-8">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-            <svg
-              className="w-8 h-8 text-primary"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"
-              />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">LLM Control Plane</h1>
-          <p className="text-muted-foreground mt-2">
+    <main className="min-h-screen grid place-items-center px-6 grid-bg">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-7">
+          <span className="grid place-items-center w-12 h-12 mx-auto rounded-xl bg-primary text-primary-foreground">
+            <Sparkles className="w-6 h-6" />
+          </span>
+          <h1 className="text-xl font-semibold tracking-tight mt-4">LLMPlane</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">
             Sign in to manage your LLM infrastructure
           </p>
         </div>
 
-        {error && (
-          <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-            {error}
+        <div className="surface p-5">
+          <div className="flex gap-1 p-1 rounded-md bg-surface-2 mb-5">
+            {(
+              [
+                ["key", "I have an API key"],
+                ["bootstrap", "First-time setup"],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                onClick={() => {
+                  setMode(m);
+                  setError(null);
+                }}
+                className={cn(
+                  "flex-1 px-3 py-1.5 rounded text-sm font-medium transition-colors",
+                  mode === m
+                    ? "bg-surface-1 text-foreground shadow-elev-1"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-        )}
 
-        <div className="space-y-3">
-          <button
-            onClick={() => handleOAuthLogin("github")}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg bg-[#24292f] text-white font-medium hover:bg-[#24292f]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-            </svg>
-            {loading ? "Redirecting..." : "Continue with GitHub"}
-          </button>
+          {error && (
+            <div className="mb-4 flex items-start gap-2 p-3 rounded-md bg-danger-subtle border border-danger/25">
+              <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+              <p className="text-sm text-danger break-words">{error}</p>
+            </div>
+          )}
 
-          <button
-            onClick={() => handleOAuthLogin("google")}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg bg-white text-gray-800 font-medium border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-            {loading ? "Redirecting..." : "Continue with Google"}
-          </button>
-        </div>
+          {mode === "key" ? (
+            <form onSubmit={submitKey} className="space-y-3">
+              <label className="block">
+                <span className="text-sm font-medium">Project API key</span>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="llcp_..."
+                  className="mt-1.5 w-full px-3 py-2 rounded-md bg-surface-2 border border-border font-mono text-sm focus:outline-none focus:border-primary"
+                />
+              </label>
+              <p className="text-xs text-subtle-foreground">
+                Stored in this browser only, and sent as a bearer token.
+              </p>
+              <button
+                type="submit"
+                disabled={busy || !apiKey.trim()}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                Sign in
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={submitBootstrap} className="space-y-3">
+              <label className="block">
+                <span className="text-sm font-medium">Bootstrap token</span>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={bootstrapToken}
+                  onChange={(e) => setBootstrapToken(e.target.value)}
+                  placeholder="BOOTSTRAP_ADMIN_TOKEN"
+                  className="mt-1.5 w-full px-3 py-2 rounded-md bg-surface-2 border border-border font-mono text-sm focus:outline-none focus:border-primary"
+                />
+              </label>
+              <p className="text-xs text-subtle-foreground">
+                The value of <span className="font-mono">BOOTSTRAP_ADMIN_TOKEN</span> in your
+                backend environment. This creates the default project and one admin API key.
+              </p>
+              <button
+                type="submit"
+                disabled={busy || !bootstrapToken.trim()}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                Create my first API key
+              </button>
+            </form>
+          )}
 
-        <div className="mt-6 text-center">
-          <p className="text-xs text-muted-foreground">
-            By signing in, you agree to the Terms of Service and Privacy Policy.
-          </p>
-        </div>
-
-        <div className="mt-8 pt-6 border-t border-border">
-          <p className="text-xs text-muted-foreground text-center">
-            Or use an API key{" "}
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="text-primary hover:underline"
-            >
-              directly
-            </button>
-          </p>
+          <div className="mt-5 pt-5 border-t border-border">
+            <p className="text-xs text-subtle-foreground text-center mb-3">
+              Or continue with OAuth (requires provider credentials on the backend)
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => oauth("github")}
+                className="px-3 py-2 rounded-md border border-border text-sm font-medium text-muted-foreground hover:bg-surface-2 hover:text-foreground transition-colors"
+              >
+                GitHub
+              </button>
+              <button
+                onClick={() => oauth("google")}
+                className="px-3 py-2 rounded-md border border-border text-sm font-medium text-muted-foreground hover:bg-surface-2 hover:text-foreground transition-colors"
+              >
+                Google
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
