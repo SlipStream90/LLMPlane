@@ -18,6 +18,40 @@ function resolveBaseUrl(raw: string | undefined): string {
 
 const API_BASE_URL = resolveBaseUrl(process.env.NEXT_PUBLIC_API_URL);
 
+/*
+ * Guard against a misconfigured NEXT_PUBLIC_API_URL.
+ *
+ * This has now gone wrong twice in ways that are invisible from the UI, because
+ * the backend answers a wrong path with a plain `{"detail":"Not Found"}` that
+ * looks exactly like an application-level 404:
+ *
+ *   - a value with no scheme ("host.up.railway.app") makes fetch treat the
+ *     result as a RELATIVE url, so requests silently go to the frontend origin;
+ *   - a value carrying a near-miss prefix ("…/api/vi", letter i rather than
+ *     digit 1) gets `/api/v1` appended to it, producing `/api/vi/api/v1/…`.
+ *
+ * Neither is recoverable here without guessing at intent, so this warns loudly
+ * at startup instead of failing silently on every request.
+ */
+if (typeof window !== "undefined") {
+  const occurrences = (API_BASE_URL.match(/\/api\//g) ?? []).length;
+  if (!/^https?:\/\//i.test(API_BASE_URL)) {
+    console.error(
+      `[llmplane] NEXT_PUBLIC_API_URL has no http(s):// scheme, so every API ` +
+        `request will be sent to this site's own origin instead of the backend. ` +
+        `Resolved base: ${API_BASE_URL}`
+    );
+  } else if (occurrences > 1) {
+    console.error(
+      `[llmplane] NEXT_PUBLIC_API_URL looks misconfigured: the resolved API base ` +
+        `contains "/api/" more than once, which means it already carried a ` +
+        `path prefix before "${API_V1_PREFIX}" was appended. Every request will ` +
+        `404. Resolved base: ${API_BASE_URL} — it should be either the bare ` +
+        `origin (https://host) or the full base (https://host${API_V1_PREFIX}).`
+    );
+  }
+}
+
 /** Requests that outlive this are aborted rather than hanging the UI. */
 const DEFAULT_TIMEOUT_MS = 30_000;
 
